@@ -3,12 +3,17 @@
 set -euo pipefail
 
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
 hypr_dir="$config_home/hypr"
-rm -f "$HOME/.local/bin/live-stream-pip" "$hypr_dir/live-stream-pip.lua"
+rm -f "$HOME/.local/bin/stream-pip" "$hypr_dir/stream-pip.lua" \
+  "$data_home/applications/omarchy-streampip.desktop" \
+  "$data_home/icons/hicolor/scalable/apps/omarchy-streampip.svg"
 
 sed -i '/^-- Live Stream PiP: prompts for an RTSP\/RTSPS URL and opens a pinned overlay\.$/d; /^o.bind("SUPER + SHIFT + ALT + L", "Live Stream PiP", "live-stream-pip")$/d' "$hypr_dir/bindings.lua"
+sed -i '/^-- Stream PiP: prompts for an RTSP\/RTSPS URL and opens a pinned overlay\.$/d; /^o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "stream-pip")$/d' "$hypr_dir/bindings.lua"
+sed -i '/^-- Close StreamPiP even when its window has not received keyboard focus\.$/,/^o.bind("SUPER + SHIFT + ALT + W", "Close Stream PiP", close_stream_pip)$/d' "$hypr_dir/bindings.lua"
 sed -i '/^-- Live Stream PiP window rules\.$/d; /^dofile(os.getenv("HOME") .. "\/.config\/hypr\/live-stream-pip.lua")$/d' "$hypr_dir/hyprland.lua"
 
 hyprctl reload
 hyprctl configerrors
-printf '%s\n' 'Live Stream PiP removed. The saved RTSP URL remains in ~/.config/omarchy/live-stream-pip/stream-url.'
+printf '%s\n' 'Stream PiP removed. Saved streams remain in ~/.config/omarchy/live-stream-pip/streams.tsv.'

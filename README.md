@@ -5,10 +5,14 @@ picture-in-picture window.
 
 ## Controls
 
-- `SUPER + SHIFT + ALT + L`: select a saved stream or choose **Add a new
-  stream…** to save another RTSP/RTSPS URL.
+- `SUPER + SHIFT + ALT + L`: select a saved stream, choose **Add a new
+  stream…** to save another RTSP/RTSPS URL, or choose **Delete a saved
+  stream…** and confirm its removal.
 - `SUPER + Right Mouse drag`: resize the stream window (native Omarchy behavior).
 - `SUPER + Left Mouse drag`: move the window.
+- `SUPER + W`: close the active Stream PiP window.
+- `SUPER + SHIFT + ALT + W`: close any StreamPiP window, including one that
+  failed to receive keyboard focus.
 
 The PiP opens at 600×338 in the lower-right corner, remains visible while changing
 workspaces, and preserves its aspect ratio. Saved stream names and URLs are stored
@@ -19,11 +23,14 @@ credentials.
 ## Install from a repository
 
 ```bash
-omarchy plugin add https://github.com/OWNER/omarchy-streampip.git --enable
+omarchy plugin add https://github.com/byronroark/omarchy-streampip.git --enable
 ```
 
 The bar icon opens the stream picker. It requires `mpv` and `zenity`, both of
 which are part of the standard Omarchy environment.
+
+After running the installer, search for **StreamPiP** in Omarchy Apps to launch
+it from the dome-camera icon.
 
 ## Optional PiP hotkey and window rule
 

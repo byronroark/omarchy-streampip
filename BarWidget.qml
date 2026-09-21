@@ -10,7 +10,7 @@ BarWidget {
   moduleName: "byronroark.streampip"
 
   readonly property string launcherPath: decodeURIComponent(
-    Qt.resolvedUrl("live-stream-pip").toString().replace("file://", "")
+    Qt.resolvedUrl("stream-pip").toString().replace("file://", "")
   )
 
   implicitWidth: button.implicitWidth
@@ -25,7 +25,7 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     text: "󰑊"
-    tooltipText: "Open Live Stream PiP"
+    tooltipText: "Open Stream PiP"
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.LeftButton) root.launch()
     }

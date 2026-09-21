@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=StreamPiP
+GenericName=Live Stream Picture-in-Picture
+Comment=Open a saved RTSP or RTSPS stream in picture-in-picture
+Exec=stream-pip
+Icon=omarchy-streampip
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=rtsp;rtsps;camera;stream;pip;live;
+StartupNotify=false

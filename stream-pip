@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Launch an RTSP stream in an Omarchy-managed picture-in-picture mpv window.
+set -euo pipefail
+
+state_dir="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/live-stream-pip"
+streams_file="$state_dir/streams.tsv"
+legacy_url_file="$state_dir/stream-url"
+mkdir -p "$state_dir"
+chmod 700 "$state_dir"
+
+if [[ ! -e "$streams_file" && -r "$legacy_url_file" ]]; then
+  legacy_url=$(<"$legacy_url_file")
+  if [[ -n "$legacy_url" ]]; then
+    umask 077
+    printf 'Last stream\t%s\n' "$legacy_url" > "$streams_file"
+  fi
+fi
+
+add_stream() {
+  local name url
+  name=$(zenity --entry \
+    --title="Add Live Stream" \
+    --text="Name this stream:" \
+    --entry-text="Live stream" \
+    --width=480) || return 1
+
+  if [[ -z "$name" || "$name" == *$'\t'* || "$name" == *$'\n'* ]]; then
+    zenity --error --title="Stream PiP" --text="Enter a non-empty stream name without tabs or line breaks."
+    return 1
+  fi
+
+  url=$(zenity --entry \
+    --title="Add Live Stream" \
+    --text="Enter its RTSP or RTSPS URL:" \
+    --width=720) || return 1
+
+  if [[ ! "$url" =~ ^rtsps?:// || "$url" == *$'\t'* || "$url" == *$'\n'* ]]; then
+    zenity --error --title="Stream PiP" --text="Enter an RTSP/RTSPS URL without tabs or line breaks."
+    return 1
+  fi
+
+  umask 077
+  printf '%s\t%s\n' "$name" "$url" >> "$streams_file"
+  chmod 600 "$streams_file"
+  printf '%s' "$url"
+}
+
+delete_stream() {
+  local line_number=0 name saved_url selected_line temp_file line current_line=0
+  local dialog_args=(--list --title="Delete Stream PiP" --text="Select the saved stream to delete:" --width=640 --height=360 --hide-column=2 --print-column=2 --column="Stream" --column="Row")
+  while IFS=$'\t' read -r name saved_url; do
+    line_number=$((line_number + 1))
+    [[ -n "$name" && -n "$saved_url" ]] && dialog_args+=("$name" "$line_number")
+  done < "$streams_file"
+  selected_line=$(zenity "${dialog_args[@]}") || return 1
+  [[ "$selected_line" =~ ^[0-9]+$ ]] || return 1
+  name=$(sed -n "${selected_line}s/\t.*//p" "$streams_file")
+  zenity --question --title="Delete Stream PiP" --text="Delete saved stream ‘$name’? This cannot be undone." || return 1
+  umask 077
+  temp_file=$(mktemp "$state_dir/streams.tsv.XXXXXX")
+  chmod 600 "$temp_file"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    current_line=$((current_line + 1))
+    [[ "$current_line" == "$selected_line" ]] || printf '%s\n' "$line" >> "$temp_file"
+  done < "$streams_file"
+  mv "$temp_file" "$streams_file"
+  zenity --info --title="Stream PiP" --text="Deleted ‘$name’."
+}
+
+if [[ -s "$streams_file" ]]; then
+  dialog_args=(
+    --list
+    --title="Stream PiP"
+    --text="Select a saved stream, add one, or manage saved streams:"
+    --width=760
+    --height=360
+    --hide-column=2
+    --print-column=2
+    --column="Stream"
+    --column="Action"
+  )
+  while IFS=$'\t' read -r name saved_url; do
+    [[ -n "$name" && -n "$saved_url" ]] && dialog_args+=("$name" "$saved_url")
+  done < "$streams_file"
+  dialog_args+=("Add a new stream…" "__ADD_STREAM__" "Delete a saved stream…" "__DELETE_STREAM__")
+  url=$(zenity "${dialog_args[@]}") || exit 0
+else
+  url="__ADD_STREAM__"
+fi
+
+if [[ "$url" == "__ADD_STREAM__" ]]; then
+  url=$(add_stream) || exit 0
+elif [[ "$url" == "__DELETE_STREAM__" ]]; then
+  delete_stream || exit 0
+  exit 0
+fi
+
+exec mpv \
+  --force-window=immediate \
+  --title="Stream PiP" \
+  --wayland-app-id="omarchy-stream-pip" \
+  --profile=low-latency \
+  --cache=yes \
+  --demuxer-max-bytes=8MiB \
+  --demuxer-max-back-bytes=2MiB \
+  "$url"
