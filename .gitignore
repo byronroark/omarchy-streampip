@@ -1,0 +1,3 @@
+# RTSP URLs can contain camera credentials. Never commit local stream state.
+stream-url
+streams.tsv

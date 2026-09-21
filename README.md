@@ -1,0 +1,49 @@
+# Omarchy StreamPiP
+
+An Omarchy bar widget and RTSP/RTSPS launcher for a low-latency mpv
+picture-in-picture window.
+
+## Controls
+
+- `SUPER + SHIFT + ALT + L`: select a saved stream or choose **Add a new
+  stream…** to save another RTSP/RTSPS URL.
+- `SUPER + Right Mouse drag`: resize the stream window (native Omarchy behavior).
+- `SUPER + Left Mouse drag`: move the window.
+
+The PiP opens at 600×338 in the lower-right corner, remains visible while changing
+workspaces, and preserves its aspect ratio. Saved stream names and URLs are stored
+with owner-only permissions at `~/.config/omarchy/live-stream-pip/streams.tsv`.
+This is intentional so the hotkey can reuse streams, but URLs may contain RTSP
+credentials.
+
+## Install from a repository
+
+```bash
+omarchy plugin add https://github.com/OWNER/omarchy-streampip.git --enable
+```
+
+The bar icon opens the stream picker. It requires `mpv` and `zenity`, both of
+which are part of the standard Omarchy environment.
+
+## Optional PiP hotkey and window rule
+
+Run the included installer after adding the plugin to enable a dedicated
+`SUPER + SHIFT + ALT + L` hotkey and the pinned lower-right PiP window rule:
+
+```bash
+./install.sh
+```
+
+This uses only user-owned files under `~/.local/bin` and `~/.config/hypr`.
+
+## Remove
+
+```bash
+./uninstall.sh
+```
+
+To remove the bar widget and its installed source:
+
+```bash
+omarchy plugin remove byronroark.streampip
+```

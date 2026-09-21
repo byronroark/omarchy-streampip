@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Launch an RTSP stream in an Omarchy-managed picture-in-picture mpv window.
+set -euo pipefail
+
+state_dir="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/live-stream-pip"
+streams_file="$state_dir/streams.tsv"
+legacy_url_file="$state_dir/stream-url"
+mkdir -p "$state_dir"
+chmod 700 "$state_dir"
+
+if [[ ! -e "$streams_file" && -r "$legacy_url_file" ]]; then
+  legacy_url=$(<"$legacy_url_file")
+  if [[ -n "$legacy_url" ]]; then
+    umask 077
+    printf 'Last stream\t%s\n' "$legacy_url" > "$streams_file"
+  fi
+fi
+
+add_stream() {
+  local name url
+  name=$(zenity --entry \
+    --title="Add Live Stream" \
+    --text="Name this stream:" \
+    --entry-text="Live stream" \
+    --width=480) || return 1
+
+  if [[ -z "$name" || "$name" == *$'\t'* || "$name" == *$'\n'* ]]; then
+    zenity --error --title="Live Stream PiP" --text="Enter a non-empty stream name without tabs or line breaks."
+    return 1
+  fi
+
+  url=$(zenity --entry \
+    --title="Add Live Stream" \
+    --text="Enter its RTSP or RTSPS URL:" \
+    --width=720) || return 1
+
+  if [[ ! "$url" =~ ^rtsps?:// ]]; then
+    zenity --error --title="Live Stream PiP" --text="The URL must begin with rtsp:// or rtsps://."
+    return 1
+  fi
+
+  umask 077
+  printf '%s\t%s\n' "$name" "$url" >> "$streams_file"
+  chmod 600 "$streams_file"
+  printf '%s' "$url"
+}
+
+if [[ -s "$streams_file" ]]; then
+  dialog_args=(
+    --list
+    --title="Live Stream PiP"
+    --text="Select a saved stream or add another one:"
+    --width=760
+    --height=360
+    --hide-column=2
+    --print-column=2
+    --column="Stream"
+    --column="Action"
+  )
+  while IFS=$'\t' read -r name saved_url; do
+    [[ -n "$name" && -n "$saved_url" ]] && dialog_args+=("$name" "$saved_url")
+  done < "$streams_file"
+  dialog_args+=("Add a new stream…" "__ADD_STREAM__")
+  url=$(zenity "${dialog_args[@]}") || exit 0
+else
+  url="__ADD_STREAM__"
+fi
+
+if [[ "$url" == "__ADD_STREAM__" ]]; then
+  url=$(add_stream) || exit 0
+fi
+
+exec mpv \
+  --force-window=immediate \
+  --title="Live Stream PiP" \
+  --wayland-app-id="omarchy-live-stream-pip" \
+  --profile=low-latency \
+  --cache=yes \
+  --demuxer-max-bytes=8MiB \
+  --demuxer-max-back-bytes=2MiB \
+  "$url"
