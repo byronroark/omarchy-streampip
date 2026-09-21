@@ -8,6 +8,8 @@ picture-in-picture window.
 - `SUPER + SHIFT + ALT + L`: select a saved stream, choose **Add a new
   stream…** to save another RTSP/RTSPS URL, or choose **Delete a saved
   stream…** and confirm its removal.
+- Choose **Audio for a saved stream…** to toggle whether that stream starts
+  muted; the setting is remembered per stream.
 - `SUPER + Right Mouse drag`: resize the stream window (native Omarchy behavior).
 - `SUPER + Left Mouse drag`: move the window.
 - `SUPER + W`: close the active Stream PiP window.

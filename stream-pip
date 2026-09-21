@@ -17,7 +17,7 @@ if [[ ! -e "$streams_file" && -r "$legacy_url_file" ]]; then
 fi
 
 add_stream() {
-  local name url
+  local name url audio="audible"
   name=$(zenity --entry \
     --title="Add Live Stream" \
     --text="Name this stream:" \
@@ -40,15 +40,47 @@ add_stream() {
   fi
 
   umask 077
-  printf '%s\t%s\n' "$name" "$url" >> "$streams_file"
+  if zenity --question --title="Stream PiP" --text="Start this stream muted?"; then
+    audio="muted"
+  fi
+
+  printf '%s\t%s\t%s\n' "$name" "$url" "$audio" >> "$streams_file"
   chmod 600 "$streams_file"
-  printf '%s' "$url"
+  printf '%s\t%s' "$url" "$audio"
+}
+
+toggle_stream_audio() {
+  local line_number=0 name saved_url audio selected_line temp_file line current_line=0 new_audio
+  local dialog_args=(--list --title="Stream PiP Audio" --text="Select a saved stream:" --width=640 --height=360 --hide-column=2 --print-column=2 --column="Stream" --column="Row")
+  while IFS=$'\t' read -r name saved_url audio; do
+    line_number=$((line_number + 1))
+    [[ -n "$name" && -n "$saved_url" ]] || continue
+    [[ "$audio" == "muted" ]] && audio="Muted" || audio="Audible"
+    dialog_args+=("$name — $audio" "$line_number")
+  done < "$streams_file"
+  selected_line=$(zenity "${dialog_args[@]}") || return 1
+  [[ "$selected_line" =~ ^[0-9]+$ ]] || return 1
+
+  umask 077
+  temp_file=$(mktemp "$state_dir/streams.tsv.XXXXXX")
+  chmod 600 "$temp_file"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    current_line=$((current_line + 1))
+    if [[ "$current_line" == "$selected_line" ]]; then
+      IFS=$'\t' read -r name saved_url audio <<< "$line"
+      [[ "$audio" == "muted" ]] && new_audio="audible" || new_audio="muted"
+      printf '%s\t%s\t%s\n' "$name" "$saved_url" "$new_audio" >> "$temp_file"
+    else
+      printf '%s\n' "$line" >> "$temp_file"
+    fi
+  done < "$streams_file"
+  mv "$temp_file" "$streams_file"
 }
 
 delete_stream() {
   local line_number=0 name saved_url selected_line temp_file line current_line=0
   local dialog_args=(--list --title="Delete Stream PiP" --text="Select the saved stream to delete:" --width=640 --height=360 --hide-column=2 --print-column=2 --column="Stream" --column="Row")
-  while IFS=$'\t' read -r name saved_url; do
+  while IFS=$'\t' read -r name saved_url _; do
     line_number=$((line_number + 1))
     [[ -n "$name" && -n "$saved_url" ]] && dialog_args+=("$name" "$line_number")
   done < "$streams_file"
@@ -79,21 +111,33 @@ if [[ -s "$streams_file" ]]; then
     --column="Stream"
     --column="Action"
   )
-  while IFS=$'\t' read -r name saved_url; do
-    [[ -n "$name" && -n "$saved_url" ]] && dialog_args+=("$name" "$saved_url")
+  line_number=0
+  while IFS=$'\t' read -r name saved_url audio; do
+    line_number=$((line_number + 1))
+    [[ -n "$name" && -n "$saved_url" ]] && dialog_args+=("$name" "$line_number")
   done < "$streams_file"
-  dialog_args+=("Add a new stream…" "__ADD_STREAM__" "Delete a saved stream…" "__DELETE_STREAM__")
+  dialog_args+=("Add a new stream…" "__ADD_STREAM__" "Delete a saved stream…" "__DELETE_STREAM__" "Audio for a saved stream…" "__TOGGLE_AUDIO__")
   url=$(zenity "${dialog_args[@]}") || exit 0
 else
   url="__ADD_STREAM__"
 fi
 
 if [[ "$url" == "__ADD_STREAM__" ]]; then
-  url=$(add_stream) || exit 0
+  IFS=$'\t' read -r url audio <<< "$(add_stream)" || exit 0
 elif [[ "$url" == "__DELETE_STREAM__" ]]; then
   delete_stream || exit 0
   exit 0
+elif [[ "$url" == "__TOGGLE_AUDIO__" ]]; then
+  toggle_stream_audio || exit 0
+  exit 0
+else
+  selected_line="$url"
+  stream_line=$(sed -n "${selected_line}p" "$streams_file")
+  IFS=$'\t' read -r _ url audio <<< "$stream_line"
 fi
+
+mpv_audio_args=()
+[[ "${audio:-audible}" == "muted" ]] && mpv_audio_args+=(--mute=yes)
 
 exec mpv \
   --force-window=immediate \
@@ -103,4 +147,5 @@ exec mpv \
   --cache=yes \
   --demuxer-max-bytes=8MiB \
   --demuxer-max-back-bytes=2MiB \
+  "${mpv_audio_args[@]}" \
   "$url"
