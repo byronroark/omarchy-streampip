@@ -35,19 +35,18 @@ PopupCard {
 
   onOpenChanged: if (open) refresh()
 
-  Process {
-    id: listProcess
-    command: ["/usr/bin/env", "bash", root.launcherPath, "--list"]
-    stdout: SplitParser { onRead: line => root.parseStream(line) }
-  }
-  Process { id: actionProcess; onExited: root.refresh() }
-
   Rectangle {
     id: card
     anchors.fill: parent
     color: root.bg; border.color: root.border; border.width: 2; radius: 0
     opacity: root.open ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+    Process {
+      id: listProcess
+      command: ["/usr/bin/env", "bash", root.launcherPath, "--list"]
+      stdout: SplitParser { onRead: line => root.parseStream(line) }
+    }
+    Process { id: actionProcess; onExited: root.refresh() }
     Column {
       id: content
       width: parent.width - 28
