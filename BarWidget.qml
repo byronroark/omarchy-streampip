@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import qs.Ui
 
 // Marketplace bar-widget entry point. The actual chooser is deliberately a
@@ -18,13 +17,15 @@ BarWidget {
   implicitHeight: button.implicitHeight
 
   StreamPopup { id: popup; anchorItem: button; bar: root.bar; launcherPath: root.launcherPath }
-  function launch() { popup.open = !popup.open }
-
-  IpcHandler {
-    target: "byronroark.streampip"
-    function open(): void { popup.open = true }
-    function close(): void { popup.close() }
-    function toggle(): void { root.launch() }
+  // Expose Omarchy's bar-widget popup contract. The shell then selects the
+  // instance on the focused monitor, instead of an arbitrary per-monitor IPC
+  // handler, so the hotkey opens beneath the icon the user is looking at.
+  readonly property bool opened: popup.open
+  function open() { popup.open = true }
+  function close() { popup.close() }
+  function toggle() { popup.open = !popup.open }
+  function triggerPress(buttonCode) {
+    if (buttonCode === Qt.LeftButton) root.toggle()
   }
 
   BarIconButton {
@@ -34,7 +35,7 @@ BarWidget {
     text: "󰑊"
     tooltipText: "Open Stream PiP"
     onPressed: function(buttonCode) {
-      if (buttonCode === Qt.LeftButton) root.launch()
+      if (buttonCode === Qt.LeftButton) root.toggle()
     }
   }
 }

@@ -20,12 +20,12 @@ install -m 0644 "$plugin_dir/omarchy-streampip.desktop" "$applications_dir/omarc
 install -m 0644 "$plugin_dir/omarchy-streampip.svg" "$icons_dir/omarchy-streampip.svg"
 touch "$bindings_file" "$hyprland_file"
 
-sed -i '/^-- Stream PiP: prompts for an RTSP\/RTSPS URL and opens a pinned overlay\.$/d; /^o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "stream-pip")$/d' "$bindings_file"
-if ! rg -Fq '"Stream PiP", "omarchy-shell byronroark.streampip toggle"' "$bindings_file"; then
+sed -i '/^-- Stream PiP: opens the saved-stream popup beneath the focused bar icon\.$/d; /^-- Stream PiP: prompts for an RTSP\/RTSPS URL and opens a pinned overlay\.$/d; /^o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "stream-pip")$/d; /^o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "omarchy-shell byronroark.streampip toggle")$/d' "$bindings_file"
+if ! rg -Fq '"Stream PiP", "omarchy-shell shell toggle byronroark.streampip"' "$bindings_file"; then
   cat >> "$bindings_file" <<'EOF'
 
--- Stream PiP: prompts for an RTSP/RTSPS URL and opens a pinned overlay.
-o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "omarchy-shell byronroark.streampip toggle")
+-- Stream PiP: opens the saved-stream popup beneath the focused bar icon.
+o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "omarchy-shell shell toggle byronroark.streampip")
 EOF
 fi
 
@@ -57,5 +57,5 @@ hyprctl configerrors
 
 printf '%s\n' 'Stream PiP installed.'
 printf '%s\n' 'Launch StreamPiP from Omarchy Apps, the bar icon, or SUPER + SHIFT + ALT + L.'
-printf '%s\n' 'Press SUPER + SHIFT + ALT + L to enter or reuse an RTSP URL.'
+printf '%s\n' 'Press SUPER + SHIFT + ALT + L to open the saved-stream popup.'
 printf '%s\n' 'Resize the PiP with SUPER + Right Mouse drag.'
