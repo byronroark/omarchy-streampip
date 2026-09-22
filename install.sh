@@ -20,11 +20,12 @@ install -m 0644 "$plugin_dir/omarchy-streampip.desktop" "$applications_dir/omarc
 install -m 0644 "$plugin_dir/omarchy-streampip.svg" "$icons_dir/omarchy-streampip.svg"
 touch "$bindings_file" "$hyprland_file"
 
-if ! rg -Fq '"Stream PiP", "stream-pip"' "$bindings_file"; then
+sed -i '/^-- Stream PiP: prompts for an RTSP\/RTSPS URL and opens a pinned overlay\.$/d; /^o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "stream-pip")$/d' "$bindings_file"
+if ! rg -Fq '"Stream PiP", "omarchy-shell byronroark.streampip toggle"' "$bindings_file"; then
   cat >> "$bindings_file" <<'EOF'
 
 -- Stream PiP: prompts for an RTSP/RTSPS URL and opens a pinned overlay.
-o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "stream-pip")
+o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "omarchy-shell byronroark.streampip toggle")
 EOF
 fi
 

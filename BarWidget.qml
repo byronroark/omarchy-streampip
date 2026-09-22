@@ -19,6 +19,13 @@ BarWidget {
   StreamPopup { id: popup; anchorItem: button; bar: root.bar; launcherPath: root.launcherPath }
   function launch() { popup.open = !popup.open }
 
+  IpcHandler {
+    target: "byronroark.streampip"
+    function open(): void { popup.open = true }
+    function close(): void { popup.close() }
+    function toggle(): void { root.launch() }
+  }
+
   BarIconButton {
     id: button
     anchors.fill: parent
