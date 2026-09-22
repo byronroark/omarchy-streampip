@@ -15,11 +15,11 @@ Add a named RTSP/RTSPS stream directly from the popup:
 
 ## Controls
 
-- `SUPER + SHIFT + ALT + L`: select a saved stream, choose **Add a new
-  stream…** to save another RTSP/RTSPS URL, or choose **Delete a saved
-  stream…** and confirm its removal.
-- Choose **Audio for a saved stream…** to toggle whether that stream starts
-  muted; the setting is remembered per stream.
+- `SUPER + SHIFT + ALT + L`: open the saved-stream popup beneath the focused
+  StreamPiP bar icon. Select a stream to launch it, then use **+ Add** to save
+  another RTSP/RTSPS URL or **Remove** to delete the selected stream.
+- With a stream selected, **Mute** turns its audio off; **Audio** restores it.
+  The setting is remembered per stream.
 - `SUPER + Right Mouse drag`: resize the stream window (native Omarchy behavior).
 - `SUPER + Left Mouse drag`: move the window.
 - `SUPER + W`: close the active Stream PiP window.
