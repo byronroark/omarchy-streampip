@@ -16,9 +16,8 @@ BarWidget {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  function launch() {
-    Quickshell.execDetached(["/usr/bin/env", "bash", root.launcherPath])
-  }
+  StreamPopup { id: popup; anchorItem: button; bar: root.bar; launcherPath: root.launcherPath }
+  function launch() { popup.open = !popup.open }
 
   BarIconButton {
     id: button

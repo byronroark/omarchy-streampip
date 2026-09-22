@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch an RTSP stream in an Omarchy-managed picture-in-picture mpv window.
+# Backend for the native Stream PiP Omarchy popup.
 set -euo pipefail
 
 state_dir="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/live-stream-pip"
@@ -10,151 +10,70 @@ chmod 700 "$state_dir"
 
 if [[ ! -e "$streams_file" && -r "$legacy_url_file" ]]; then
   legacy_url=$(<"$legacy_url_file")
-  if [[ -n "$legacy_url" ]]; then
-    umask 077
-    printf 'Last stream\t%s\n' "$legacy_url" > "$streams_file"
-  fi
+  [[ -n "$legacy_url" ]] && { umask 077; printf 'Last stream\t%s\taudible\n' "$legacy_url" > "$streams_file"; }
 fi
+
+valid_row() { [[ ${1:-} =~ ^[0-9]+$ ]] && [[ -s "$streams_file" ]] && sed -n "${1}p" "$streams_file" | grep -q $'\t'; }
+
+list_streams() {
+  [[ -s "$streams_file" ]] || return 0
+  local row=0 name url audio
+  while IFS=$'\t' read -r name url audio; do
+    row=$((row + 1))
+    [[ -n "$name" && -n "$url" ]] && printf '%s\t%s\t%s\n' "$row" "$name" "${audio:-audible}"
+  done < "$streams_file"
+}
 
 add_stream() {
-  local name url audio="audible"
-  name=$(zenity --entry \
-    --title="Add Live Stream" \
-    --text="Name this stream:" \
-    --entry-text="Live stream" \
-    --width=480) || return 1
-
-  if [[ -z "$name" || "$name" == *$'\t'* || "$name" == *$'\n'* ]]; then
-    zenity --error --title="Stream PiP" --text="Enter a non-empty stream name without tabs or line breaks."
-    return 1
-  fi
-
-  url=$(zenity --entry \
-    --title="Add Live Stream" \
-    --text="Enter its RTSP or RTSPS URL:" \
-    --width=720) || return 1
-
-  if [[ ! "$url" =~ ^rtsps?:// || "$url" == *$'\t'* || "$url" == *$'\n'* ]]; then
-    zenity --error --title="Stream PiP" --text="Enter an RTSP/RTSPS URL without tabs or line breaks."
-    return 1
-  fi
-
+  local name=${1:-} url=${2:-} audio=${3:-audible}
+  [[ -n "$name" && "$name" != *$'\t'* && "$name" != *$'\n'* ]] || { echo 'Stream name is required.' >&2; return 2; }
+  [[ "$url" =~ ^rtsps?:// && "$url" != *$'\t'* && "$url" != *$'\n'* ]] || { echo 'Use an rtsp:// or rtsps:// URL.' >&2; return 2; }
+  [[ "$audio" == muted ]] || audio=audible
   umask 077
-  if zenity --question --title="Stream PiP" --text="Start this stream muted?"; then
-    audio="muted"
-  fi
-
   printf '%s\t%s\t%s\n' "$name" "$url" "$audio" >> "$streams_file"
   chmod 600 "$streams_file"
-  printf '%s\t%s' "$url" "$audio"
 }
 
-toggle_stream_audio() {
-  local line_number=0 name saved_url audio selected_line temp_file line current_line=0 new_audio
-  local dialog_args=(--list --title="Stream PiP Audio" --text="Select a saved stream:" --width=640 --height=360 --hide-column=2 --print-column=2 --column="Stream" --column="Row")
-  while IFS=$'\t' read -r name saved_url audio; do
-    line_number=$((line_number + 1))
-    [[ -n "$name" && -n "$saved_url" ]] || continue
-    [[ "$audio" == "muted" ]] && audio="Muted" || audio="Audible"
-    dialog_args+=("$name — $audio" "$line_number")
-  done < "$streams_file"
-  selected_line=$(zenity "${dialog_args[@]}") || return 1
-  [[ "$selected_line" =~ ^[0-9]+$ ]] || return 1
-
-  umask 077
-  temp_file=$(mktemp "$state_dir/streams.tsv.XXXXXX")
-  chmod 600 "$temp_file"
+rewrite_streams() {
+  local row=$1 mode=$2 temp line current=0 name url audio
+  umask 077; temp=$(mktemp "$state_dir/streams.tsv.XXXXXX"); chmod 600 "$temp"
   while IFS= read -r line || [[ -n "$line" ]]; do
-    current_line=$((current_line + 1))
-    if [[ "$current_line" == "$selected_line" ]]; then
-      IFS=$'\t' read -r name saved_url audio <<< "$line"
-      [[ "$audio" == "muted" ]] && new_audio="audible" || new_audio="muted"
-      printf '%s\t%s\t%s\n' "$name" "$saved_url" "$new_audio" >> "$temp_file"
-    else
-      printf '%s\n' "$line" >> "$temp_file"
+    current=$((current + 1))
+    if [[ "$current" != "$row" ]]; then
+      printf '%s\n' "$line" >> "$temp"; continue
+    fi
+    IFS=$'\t' read -r name url audio <<< "$line"
+    if [[ "$mode" == toggle ]]; then
+      [[ "$audio" == muted ]] && audio=audible || audio=muted
+      printf '%s\t%s\t%s\n' "$name" "$url" "$audio" >> "$temp"
     fi
   done < "$streams_file"
-  mv "$temp_file" "$streams_file"
+  mv "$temp" "$streams_file"
 }
 
-delete_stream() {
-  local line_number=0 name saved_url selected_line temp_file line current_line=0
-  local dialog_args=(--list --title="Delete Stream PiP" --text="Select the saved stream to delete:" --width=640 --height=360 --hide-column=2 --print-column=2 --column="Stream" --column="Row")
-  while IFS=$'\t' read -r name saved_url _; do
-    line_number=$((line_number + 1))
-    [[ -n "$name" && -n "$saved_url" ]] && dialog_args+=("$name" "$line_number")
-  done < "$streams_file"
-  selected_line=$(zenity "${dialog_args[@]}") || return 1
-  [[ "$selected_line" =~ ^[0-9]+$ ]] || return 1
-  name=$(sed -n "${selected_line}s/\t.*//p" "$streams_file")
-  zenity --question --title="Delete Stream PiP" --text="Delete saved stream ‘$name’? This cannot be undone." || return 1
+launch_stream() {
+  local row=$1 line name url audio playlist_file
+  valid_row "$row" || return 2
+  line=$(sed -n "${row}p" "$streams_file")
+  IFS=$'\t' read -r name url audio <<< "$line"
+  [[ -n "$url" ]] || return 2
+  local mpv_audio_args=()
+  [[ "$audio" == muted ]] && mpv_audio_args+=(--mute=yes)
   umask 077
-  temp_file=$(mktemp "$state_dir/streams.tsv.XXXXXX")
-  chmod 600 "$temp_file"
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    current_line=$((current_line + 1))
-    [[ "$current_line" == "$selected_line" ]] || printf '%s\n' "$line" >> "$temp_file"
-  done < "$streams_file"
-  mv "$temp_file" "$streams_file"
-  zenity --info --title="Stream PiP" --text="Deleted ‘$name’."
+  playlist_file=$(mktemp "$state_dir/session.XXXXXX")
+  chmod 600 "$playlist_file"
+  printf '%s\n' "$url" > "$playlist_file"
+  trap 'rm -f "$playlist_file"' EXIT
+  mpv --force-window=immediate --title="Stream PiP" --wayland-app-id="omarchy-stream-pip" \
+    --profile=low-latency --cache=yes --demuxer-max-bytes=8MiB --demuxer-max-back-bytes=2MiB \
+    "${mpv_audio_args[@]}" --playlist="$playlist_file"
 }
 
-if [[ -s "$streams_file" ]]; then
-  dialog_args=(
-    --list
-    --title="Stream PiP"
-    --text="Select a saved stream, add one, or manage saved streams:"
-    --width=760
-    --height=360
-    --hide-column=2
-    --print-column=2
-    --column="Stream"
-    --column="Action"
-  )
-  line_number=0
-  while IFS=$'\t' read -r name saved_url audio; do
-    line_number=$((line_number + 1))
-    [[ -n "$name" && -n "$saved_url" ]] && dialog_args+=("$name" "$line_number")
-  done < "$streams_file"
-  dialog_args+=("Add a new stream…" "__ADD_STREAM__" "Delete a saved stream…" "__DELETE_STREAM__" "Audio for a saved stream…" "__TOGGLE_AUDIO__")
-  url=$(zenity "${dialog_args[@]}") || exit 0
-else
-  url="__ADD_STREAM__"
-fi
-
-if [[ "$url" == "__ADD_STREAM__" ]]; then
-  IFS=$'\t' read -r url audio <<< "$(add_stream)" || exit 0
-elif [[ "$url" == "__DELETE_STREAM__" ]]; then
-  delete_stream || exit 0
-  exit 0
-elif [[ "$url" == "__TOGGLE_AUDIO__" ]]; then
-  toggle_stream_audio || exit 0
-  exit 0
-else
-  selected_line="$url"
-  stream_line=$(sed -n "${selected_line}p" "$streams_file")
-  IFS=$'\t' read -r _ url audio <<< "$stream_line"
-fi
-
-mpv_audio_args=()
-[[ "${audio:-audible}" == "muted" ]] && mpv_audio_args+=(--mute=yes)
-
-# RTSP URLs often contain credentials.  Give mpv a private playlist rather
-# than passing the URL as an argument, since process arguments are visible to
-# other local process-inspection tools.
-umask 077
-playlist_file=$(mktemp "$state_dir/session.XXXXXX")
-chmod 600 "$playlist_file"
-printf '%s\n' "$url" > "$playlist_file"
-trap 'rm -f "$playlist_file"' EXIT
-
-mpv \
-  --force-window=immediate \
-  --title="Stream PiP" \
-  --wayland-app-id="omarchy-stream-pip" \
-  --profile=low-latency \
-  --cache=yes \
-  --demuxer-max-bytes=8MiB \
-  --demuxer-max-back-bytes=2MiB \
-  "${mpv_audio_args[@]}" \
-  --playlist="$playlist_file"
+case ${1:-list} in
+  --list|list) list_streams ;;
+  --add) add_stream "${2:-}" "${3:-}" "${4:-audible}" ;;
+  --toggle) valid_row "${2:-}" && rewrite_streams "$2" toggle ;;
+  --delete) valid_row "${2:-}" && rewrite_streams "$2" delete ;;
+  --launch) launch_stream "${2:-}" ;;
+  *) echo "Usage: stream-pip [--list|--add NAME URL [muted]|--toggle ROW|--delete ROW|--launch ROW]" >&2; exit 2 ;;
+esac

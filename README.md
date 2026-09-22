@@ -31,8 +31,8 @@ owner-only playlist file, not the process command line.
 omarchy plugin add https://github.com/byronroark/omarchy-streampip.git --enable
 ```
 
-The bar icon opens the stream picker. It requires `mpv` and `zenity`, both of
-which are part of the standard Omarchy environment.
+The bar icon opens a compact, Omarchy-themed picker directly beneath the icon.
+It requires `mpv`, which is part of the standard Omarchy environment.
 
 After running the installer, search for **StreamPiP** in Omarchy Apps to launch
 it from the dome-camera icon.
