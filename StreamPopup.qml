@@ -6,10 +6,7 @@ import qs.Ui
 
 PopupCard {
   id: root
-  required property Item anchorItem
-  required property QtObject bar
   required property string launcherPath
-  property bool open: false
   property int selectedRow: -1
   property string errorText: ""
   readonly property var anchorWindow: anchorItem ? anchorItem.QsWindow.window : null
