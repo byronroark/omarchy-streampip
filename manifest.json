@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "byronroark.streampip",
   "name": "StreamPiP",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "author": "Byron Roark",
   "license": "MIT",
   "description": "Launch named RTSP and RTSPS streams in a low-latency mpv picture-in-picture window.",
