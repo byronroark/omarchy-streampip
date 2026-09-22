@@ -139,7 +139,16 @@ fi
 mpv_audio_args=()
 [[ "${audio:-audible}" == "muted" ]] && mpv_audio_args+=(--mute=yes)
 
-exec mpv \
+# RTSP URLs often contain credentials.  Give mpv a private playlist rather
+# than passing the URL as an argument, since process arguments are visible to
+# other local process-inspection tools.
+umask 077
+playlist_file=$(mktemp "$state_dir/session.XXXXXX")
+chmod 600 "$playlist_file"
+printf '%s\n' "$url" > "$playlist_file"
+trap 'rm -f "$playlist_file"' EXIT
+
+mpv \
   --force-window=immediate \
   --title="Stream PiP" \
   --wayland-app-id="omarchy-stream-pip" \
@@ -148,4 +157,4 @@ exec mpv \
   --demuxer-max-bytes=8MiB \
   --demuxer-max-back-bytes=2MiB \
   "${mpv_audio_args[@]}" \
-  "$url"
+  --playlist="$playlist_file"
