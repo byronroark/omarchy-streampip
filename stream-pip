@@ -63,10 +63,16 @@ launch_stream() {
   playlist_file=$(mktemp "$state_dir/session.XXXXXX")
   chmod 600 "$playlist_file"
   printf '%s\n' "$url" > "$playlist_file"
-  trap 'rm -f "$playlist_file"' EXIT
-  mpv --force-window=immediate --title="Stream PiP" --wayland-app-id="omarchy-stream-pip" \
-    --profile=low-latency --cache=yes --demuxer-max-bytes=8MiB --demuxer-max-back-bytes=2MiB \
-    "${mpv_audio_args[@]}" --playlist="$playlist_file"
+  # The popup process must return immediately, otherwise its single action
+  # runner remains occupied for the lifetime of mpv and blocks a second stream.
+  # Keep the protected playlist alive in the detached child and remove it only
+  # after that stream exits.
+  (
+    trap 'rm -f "$playlist_file"' EXIT
+    mpv --force-window=immediate --title="Stream PiP" --wayland-app-id="omarchy-stream-pip" \
+      --profile=low-latency --cache=yes --demuxer-max-bytes=8MiB --demuxer-max-back-bytes=2MiB \
+      "${mpv_audio_args[@]}" --playlist="$playlist_file"
+  ) >/dev/null 2>&1 &
 }
 
 case ${1:-list} in
