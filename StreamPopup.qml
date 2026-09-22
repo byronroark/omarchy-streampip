@@ -31,6 +31,10 @@ PopupCard {
     if (fields.length >= 3) streams.append({ row: Number(fields[0]), name: fields[1], audio: fields[2] })
   }
   function select(row) { selectedRow = selectedRow === row ? -1 : row }
+  function selectedStreamIsMuted() {
+    return selectedRow > 0 && selectedRow <= streams.count
+      && streams.get(selectedRow - 1).audio === "muted"
+  }
 
   onOpenChanged: if (open) refresh()
 
@@ -70,7 +74,14 @@ PopupCard {
       Text { visible: streams.count === 0; text: "No saved streams yet."; color: root.muted; font.family: root.fontFamily; font.pixelSize: 12 }
       Row { width: parent.width; spacing: 7
         PopupButton { label: "+ Add"; width: (parent.width - 14) / 3; onClicked: addForm.visible = !addForm.visible }
-        PopupButton { label: "Audio"; width: (parent.width - 14) / 3; enabled: root.selectedRow > 0; onClicked: root.run(["--toggle", String(root.selectedRow)]) }
+        PopupButton {
+          // State labels describe the action: mute audible streams, restore
+          // audio for muted ones.
+          label: root.selectedStreamIsMuted() ? "Audio" : "Mute"
+          width: (parent.width - 14) / 3
+          enabled: root.selectedRow > 0
+          onClicked: root.run(["--toggle", String(root.selectedRow)])
+        }
         PopupButton { label: "Remove"; width: (parent.width - 14) / 3; enabled: root.selectedRow > 0; onClicked: root.run(["--delete", String(root.selectedRow)]) }
       }
       Column {
