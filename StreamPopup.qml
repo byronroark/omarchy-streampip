@@ -2,8 +2,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Ui
 
-PopupWindow {
+PopupCard {
   id: root
   required property Item anchorItem
   required property QtObject bar
@@ -18,12 +19,10 @@ PopupWindow {
   readonly property color fg: Color.popups.text
   readonly property color muted: Color.muted
   readonly property string fontFamily: bar ? bar.fontFamily : "monospace"
-  readonly property int margin: 10
 
-  implicitWidth: 370
-  implicitHeight: Math.max(130, content.implicitHeight + 28)
-  visible: open || card.opacity > 0
-  color: "transparent"
+  contentWidth: 342
+  contentHeight: Math.max(102, content.implicitHeight)
+  triggerMode: "hover"
 
   function close() { open = false }
   function refresh() { streams.clear(); selectedRow = -1; listProcess.running = true }
@@ -34,31 +33,7 @@ PopupWindow {
   }
   function select(row) { selectedRow = selectedRow === row ? -1 : row }
 
-  onOpenChanged: {
-    if (!bar) return
-    if (open) { bar.requestPopout(root); refresh() }
-    else if (bar.activePopout === root) bar.releasePopout(root)
-  }
-
-  anchor {
-    id: popupAnchor
-    window: root.anchorWindow
-    adjustment: PopupAdjustment.Slide
-    edges: Edges.Top | Edges.Left
-    gravity: Edges.Bottom | Edges.Right
-    rect.width: 1; rect.height: 1
-    onAnchoring: {
-      if (!root.anchorItem || !root.anchorWindow) return
-      var w = root.implicitWidth, h = root.implicitHeight
-      var x = root.anchorItem.width / 2 - w / 2
-      var y = root.anchorItem.height + root.margin
-      if (root.bar.position === "bottom") y = -h - root.margin
-      else if (root.bar.position === "left") { x = root.anchorItem.width + root.margin; y = root.anchorItem.height / 2 - h / 2 }
-      else if (root.bar.position === "right") { x = -w - root.margin; y = root.anchorItem.height / 2 - h / 2 }
-      var point = root.anchorWindow.contentItem.mapFromItem(root.anchorItem, x, y)
-      popupAnchor.rect.x = Math.round(point.x); popupAnchor.rect.y = Math.round(point.y)
-    }
-  }
+  onOpenChanged: if (open) refresh()
 
   Process {
     id: listProcess

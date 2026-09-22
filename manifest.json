@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "byronroark.streampip",
   "name": "Omarchy StreamPiP",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "Byron Roark",
   "license": "MIT",
   "description": "Launch named RTSP and RTSPS streams in a low-latency mpv picture-in-picture window.",
