@@ -18,7 +18,9 @@ PopupCard {
   readonly property string fontFamily: bar ? bar.fontFamily : "monospace"
 
   contentWidth: 342
-  contentHeight: Math.max(102, content.implicitHeight)
+  // PopupCard supplies the only frame and its own padding. Reserve the
+  // StreamPiP content inset too, so the action row never clips at the bottom.
+  contentHeight: Math.max(102, content.implicitHeight + 28)
   triggerMode: "hover"
 
   function close() { open = false }
@@ -32,10 +34,9 @@ PopupCard {
 
   onOpenChanged: if (open) refresh()
 
-  Rectangle {
+  Item {
     id: card
     anchors.fill: parent
-    color: root.bg; border.color: root.border; border.width: 2; radius: 0
     opacity: root.open ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
     Process {
