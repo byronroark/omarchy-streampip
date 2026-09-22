@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Io
 import qs.Commons
 
@@ -40,8 +39,6 @@ PopupWindow {
     if (open) { bar.requestPopout(root); refresh() }
     else if (bar.activePopout === root) bar.releasePopout(root)
   }
-
-  HyprlandFocusGrab { active: root.open; windows: root.anchorWindow ? [root, root.anchorWindow] : [root]; onCleared: root.close() }
 
   anchor {
     id: popupAnchor
