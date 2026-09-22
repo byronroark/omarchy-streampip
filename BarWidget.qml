@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.Ui
 
 // Marketplace bar-widget entry point. The actual chooser is deliberately a
