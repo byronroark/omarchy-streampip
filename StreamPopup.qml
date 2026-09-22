@@ -44,6 +44,7 @@ PopupWindow {
   HyprlandFocusGrab { active: root.open; windows: root.anchorWindow ? [root, root.anchorWindow] : [root]; onCleared: root.close() }
 
   anchor {
+    id: popupAnchor
     window: root.anchorWindow
     adjustment: PopupAdjustment.Slide
     edges: Edges.Top | Edges.Left
