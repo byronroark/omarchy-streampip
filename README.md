@@ -3,6 +3,16 @@
 An Omarchy bar widget and RTSP/RTSPS launcher for a low-latency mpv
 picture-in-picture window.
 
+## Screenshots
+
+Saved streams, with quick launch, mute, and removal controls:
+
+![Saved StreamPiP streams](images/saved-streams.png)
+
+Add a named RTSP/RTSPS stream directly from the popup:
+
+![Add a StreamPiP stream](images/add-stream.png)
+
 ## Controls
 
 - `SUPER + SHIFT + ALT + L`: select a saved stream, choose **Add a new
