@@ -15,6 +15,7 @@ hyprland_file="$hypr_dir/hyprland.lua"
 mkdir -p "$bin_dir" "$hypr_dir" "$applications_dir" "$icons_dir"
 rm -f "$bin_dir/live-stream-pip" "$hypr_dir/live-stream-pip.lua"
 install -m 0755 "$plugin_dir/stream-pip" "$bin_dir/stream-pip"
+install -m 0755 "$plugin_dir/stream-pip-layout" "$bin_dir/stream-pip-layout"
 install -m 0644 "$plugin_dir/stream-pip.lua" "$rule_file"
 install -m 0644 "$plugin_dir/omarchy-streampip.desktop" "$applications_dir/omarchy-streampip.desktop"
 install -m 0644 "$plugin_dir/omarchy-streampip.svg" "$icons_dir/omarchy-streampip.svg"
@@ -26,6 +27,15 @@ if ! rg -Fq '"Stream PiP", "omarchy-shell shell toggle byronroark.streampip"' "$
 
 -- Stream PiP: opens the saved-stream popup beneath the focused bar icon.
 o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "omarchy-shell shell toggle byronroark.streampip")
+EOF
+fi
+
+sed -i '/^-- StreamPiP: arrange every active PiP to match the focused PiP\.$/d; /^o.bind("SUPER + SHIFT + ALT + T", "Arrange StreamPiP", "stream-pip-layout --arrange")$/d' "$bindings_file"
+if ! rg -Fq 'Arrange StreamPiP' "$bindings_file"; then
+  cat >> "$bindings_file" <<'EOF'
+
+-- StreamPiP: arrange every active PiP to match the focused PiP.
+o.bind("SUPER + SHIFT + ALT + T", "Arrange StreamPiP", "stream-pip-layout --arrange")
 EOF
 fi
 

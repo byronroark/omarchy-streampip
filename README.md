@@ -25,9 +25,16 @@ Add a named RTSP/RTSPS stream directly from the popup:
 - `SUPER + W`: close the active Stream PiP window.
 - `SUPER + SHIFT + ALT + W`: close any StreamPiP window, including one that
   failed to receive keyboard focus.
+- `SUPER + T`: use Omarchy's normal floating/tiled toggle on the focused PiP.
+- `SUPER + SHIFT + ALT + T`: arrange every active StreamPiP to match the
+  focused PiP. Floating PiPs reflow into a 16:9 grid on that monitor; tiled
+  PiPs move into the persistent `special:streampip` Dwindle overlay.
 
-The PiP opens at 600×338 in the lower-right corner, remains visible while changing
-workspaces, and preserves its aspect ratio. Saved stream names and URLs are stored
+The first PiP opens at 600×338 in the lower-right corner. Active floating PiPs
+automatically reflow after a stream opens or closes, preserve their aspect ratio,
+and stay pinned across workspaces. The tiled layout keeps all active streams in
+the StreamPiP special-workspace overlay while changing normal workspaces. Saved
+stream names and URLs are stored
 with owner-only permissions at `~/.config/omarchy/live-stream-pip/streams.tsv`.
 This is intentional so the hotkey can reuse streams, but URLs may contain RTSP
 credentials.

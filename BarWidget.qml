@@ -32,7 +32,7 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "󰑊"
+    text: "󰞮"
     tooltipText: "Open Stream PiP"
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.LeftButton) root.toggle()

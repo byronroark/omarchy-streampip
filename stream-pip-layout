@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# Arrange active StreamPiP windows without changing Omarchy's native SUPER + T.
+set -euo pipefail
+
+state_dir="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/live-stream-pip"
+mode_file="$state_dir/layout-mode"
+workspace_file="$state_dir/floating-workspace"
+special_workspace="streampip"
+gap=16
+
+mkdir -p "$state_dir"
+chmod 700 "$state_dir"
+
+mode() {
+  [[ -r "$mode_file" ]] && cat "$mode_file" || printf '%s\n' floating
+}
+
+set_mode() {
+  umask 077
+  printf '%s\n' "$1" > "$mode_file"
+  chmod 600 "$mode_file"
+}
+
+floating_workspace() {
+  [[ -r "$workspace_file" ]] && cat "$workspace_file"
+}
+
+set_floating_workspace() {
+  umask 077
+  printf '%s\n' "$1" > "$workspace_file"
+  chmod 600 "$workspace_file"
+}
+
+clients() {
+  hyprctl clients -j | jq -c '[.[] | select(.class == "omarchy-stream-pip")]'
+}
+
+active_pip() {
+  hyprctl activewindow -j | jq -e 'select(.class == "omarchy-stream-pip")'
+}
+
+toggle_float() {
+  local address=$1
+  hyprctl -q eval "hl.dispatch(hl.dsp.window.float({ action = \"toggle\", window = \"address:$address\" }))"
+}
+
+toggle_pin() {
+  local address=$1
+  hyprctl -q eval "hl.dispatch(hl.dsp.window.pin({ action = \"toggle\", window = \"address:$address\" }))"
+}
+
+ensure_floating() {
+  local address=$1 desired=$2 current
+  current=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .floating')
+  [[ "$current" == "$desired" ]] || toggle_float "$address"
+}
+
+ensure_pinned() {
+  local address=$1 desired=$2 current
+  current=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .pinned')
+  [[ "$current" == "$desired" ]] || toggle_pin "$address"
+}
+
+move_to_workspace() {
+  local address=$1 workspace=$2
+  hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ workspace = \"$workspace\", window = \"address:$address\" }))"
+}
+
+move_to_monitor() {
+  local address=$1 monitor=$2
+  hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ monitor = \"$monitor\", window = \"address:$address\" }))"
+}
+
+resize_window() {
+  local address=$1 width=$2 height=$3
+  hyprctl -q eval "hl.dispatch(hl.dsp.window.resize({ x = $width, y = $height, window = \"address:$address\" }))"
+}
+
+move_window() {
+  local address=$1 x=$2 y=$3
+  hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ x = $x, y = $y, window = \"address:$address\" }))"
+}
+
+special_is_visible() {
+  hyprctl monitors -j | jq -e --arg workspace "special:$special_workspace" \
+    '.[] | select(.specialWorkspace.name? == $workspace)' >/dev/null
+}
+
+show_special() {
+  special_is_visible || hyprctl -q eval "hl.dispatch(hl.dsp.workspace.toggle_special(\"$special_workspace\"))"
+}
+
+hide_special() {
+  special_is_visible && hyprctl -q eval "hl.dispatch(hl.dsp.workspace.toggle_special(\"$special_workspace\"))"
+}
+
+arrange_floating() {
+  local monitor=$1 windows count columns rows monitor_json mx my mw mh left top right bottom usable_x usable_y usable_w usable_h cell_w cell_h width height x y index address workspace
+  windows=$(clients)
+  count=$(jq 'length' <<<"$windows")
+  (( count > 0 )) || { hide_special; return 0; }
+  workspace=$(floating_workspace || true)
+  if [[ ! "$workspace" =~ ^[0-9]+$ ]]; then
+    workspace=$(hyprctl monitors -j | jq -r --argjson monitor "$monitor" '.[] | select(.id == $monitor) | .activeWorkspace.id')
+  fi
+
+  monitor_json=$(hyprctl monitors -j | jq -ce --argjson monitor "$monitor" '.[] | select(.id == $monitor)')
+  mx=$(jq -r '.x' <<<"$monitor_json"); my=$(jq -r '.y' <<<"$monitor_json")
+  mw=$(jq -r '.width' <<<"$monitor_json"); mh=$(jq -r '.height' <<<"$monitor_json")
+  left=$(jq -r '.reserved[0] // 0' <<<"$monitor_json"); top=$(jq -r '.reserved[1] // 0' <<<"$monitor_json")
+  right=$(jq -r '.reserved[2] // 0' <<<"$monitor_json"); bottom=$(jq -r '.reserved[3] // 0' <<<"$monitor_json")
+  usable_x=$((mx + left + gap)); usable_y=$((my + top + gap))
+  usable_w=$((mw - left - right - 2 * gap)); usable_h=$((mh - top - bottom - 2 * gap))
+  columns=1
+  while (( columns * columns < count )); do columns=$((columns + 1)); done
+  rows=$(((count + columns - 1) / columns))
+  cell_w=$(((usable_w - gap * (columns - 1)) / columns))
+  cell_h=$(((usable_h - gap * (rows - 1)) / rows))
+  width=$cell_w; height=$((width * 9 / 16))
+  if (( height > cell_h )); then height=$cell_h; width=$((height * 16 / 9)); fi
+
+  index=0
+  while IFS= read -r address; do
+    move_to_workspace "$address" "$workspace"
+    move_to_monitor "$address" "$monitor"
+    ensure_floating "$address" true
+    ensure_pinned "$address" true
+    x=$((usable_x + (index % columns) * (cell_w + gap) + (cell_w - width) / 2))
+    y=$((usable_y + (index / columns) * (cell_h + gap) + (cell_h - height) / 2))
+    resize_window "$address" "$width" "$height"
+    move_window "$address" "$x" "$y"
+    index=$((index + 1))
+  done < <(jq -r '.[].address' <<<"$windows")
+  hide_special
+}
+
+arrange_tiled() {
+  local monitor=$1 address workspace
+  workspace=$(hyprctl monitors -j | jq -r --argjson monitor "$monitor" '.[] | select(.id == $monitor) | .activeWorkspace.id')
+  [[ "$workspace" =~ ^[0-9]+$ ]] && set_floating_workspace "$workspace"
+  while IFS= read -r address; do
+    ensure_pinned "$address" false
+    ensure_floating "$address" false
+    move_to_monitor "$address" "$monitor"
+    move_to_workspace "$address" "special:$special_workspace"
+  done < <(clients | jq -r '.[].address')
+  show_special
+}
+
+reflow() {
+  local current=$1 target_monitor
+  target_monitor=$(hyprctl activewindow -j | jq -r '.monitor // empty')
+  [[ -n "$target_monitor" ]] || target_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .id' | head -n1)
+  [[ -n "$target_monitor" ]] || return 0
+  if [[ "$current" == tiled ]]; then arrange_tiled "$target_monitor"; else arrange_floating "$target_monitor"; fi
+}
+
+case ${1:---reflow} in
+  --arrange)
+    active=$(active_pip) || { printf '%s\n' 'Focus a StreamPiP window first.' >&2; exit 1; }
+    # A pinned PiP must be unpinned before Hyprland can tile it. Omarchy's
+    # native float toggle performs that first step, so an unpinned floating
+    # PiP on a normal workspace means "tile the set". A floating PiP already
+    # in our special workspace is the corresponding return-to-floating signal.
+    if [[ $(jq -r '.workspace.name' <<<"$active") == "special:$special_workspace" ]]; then
+      set_mode floating
+    elif [[ $(jq -r '.floating and .pinned' <<<"$active") == true ]]; then
+      set_mode floating
+    else
+      set_mode tiled
+    fi
+    reflow "$(mode)"
+    ;;
+  --reflow) reflow "$(mode)" ;;
+  *) printf '%s\n' 'Usage: stream-pip-layout [--arrange|--reflow]' >&2; exit 2 ;;
+esac

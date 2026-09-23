@@ -5,6 +5,7 @@ set -euo pipefail
 state_dir="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/live-stream-pip"
 streams_file="$state_dir/streams.tsv"
 legacy_url_file="$state_dir/stream-url"
+layout_command="${STREAM_PIP_LAYOUT_COMMAND:-stream-pip-layout}"
 mkdir -p "$state_dir"
 chmod 700 "$state_dir"
 
@@ -72,6 +73,13 @@ launch_stream() {
     mpv --force-window=immediate --title="Stream PiP" --wayland-app-id="omarchy-stream-pip" \
       --profile=low-latency --cache=yes --demuxer-max-bytes=8MiB --demuxer-max-back-bytes=2MiB \
       "${mpv_audio_args[@]}" --playlist="$playlist_file"
+    "$layout_command" --reflow >/dev/null 2>&1 || true
+  ) >/dev/null 2>&1 &
+  (
+    for _ in {1..20}; do
+      sleep 0.1
+      "$layout_command" --reflow >/dev/null 2>&1 || true
+    done
   ) >/dev/null 2>&1 &
 }
 
