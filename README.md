@@ -39,6 +39,21 @@ Select a stream to toggle its audio between **Mute** and **Audio**:
   intentionally different sizes; use `SUPER + SHIFT + ALT + T` to reset the
   whole cluster to compact defaults.
 
+### Arrange PiPs
+
+1. **Move a group:** left-drag any attached PiP. Every PiP in that attachment
+   group moves together without changing its arrangement.
+2. **Peel one away:** Shift-left-drag a PiP. It becomes independent and follows
+   the pointer until you release it.
+3. **Snap it back:** move a peeled PiP within about 48px of another PiP's top,
+   bottom, left, or right edge, then release. StreamPiP aligns the nearest
+   compatible edges exactly and preserves both PiPs' individual sizes.
+4. **Resize one PiP:** Shift-right-drag from the corner you want to adjust.
+   The opposite corner stays fixed, the 16:9 aspect ratio is preserved, and
+   neighboring PiPs are not resized.
+5. **Start over:** press `SUPER + SHIFT + ALT + T` to attach every active PiP
+   and restore the compact 320×180 thumbnail grid.
+
 The first PiP opens at 600×338 in the lower-right corner. Active floating PiPs
 automatically reflow after a stream opens or closes, preserve their aspect ratio,
 and stay pinned across workspaces. Detached streams keep their own position;
