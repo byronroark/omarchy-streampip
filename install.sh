@@ -8,17 +8,22 @@ hypr_dir="$config_home/hypr"
 bin_dir="$HOME/.local/bin"
 applications_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 icons_dir="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
+shell_plugin_dir="$config_home/omarchy/plugins/byronroark.streampip"
 rule_file="$hypr_dir/stream-pip.lua"
 bindings_file="$hypr_dir/bindings.lua"
 hyprland_file="$hypr_dir/hyprland.lua"
 
-mkdir -p "$bin_dir" "$hypr_dir" "$applications_dir" "$icons_dir"
+mkdir -p "$bin_dir" "$hypr_dir" "$applications_dir" "$icons_dir" "$shell_plugin_dir"
 rm -f "$bin_dir/live-stream-pip" "$hypr_dir/live-stream-pip.lua"
 install -m 0755 "$plugin_dir/stream-pip" "$bin_dir/stream-pip"
 install -m 0755 "$plugin_dir/stream-pip-layout" "$bin_dir/stream-pip-layout"
 install -m 0644 "$plugin_dir/stream-pip.lua" "$rule_file"
 install -m 0644 "$plugin_dir/omarchy-streampip.desktop" "$applications_dir/omarchy-streampip.desktop"
 install -m 0644 "$plugin_dir/omarchy-streampip.svg" "$icons_dir/omarchy-streampip.svg"
+# Keep the installed Omarchy bar widget in sync when this repository is used
+# as the local development/install source.
+install -m 0644 "$plugin_dir/BarWidget.qml" "$shell_plugin_dir/BarWidget.qml"
+install -m 0644 "$plugin_dir/StreamPopup.qml" "$shell_plugin_dir/StreamPopup.qml"
 touch "$bindings_file" "$hyprland_file"
 
 sed -i '/^-- Stream PiP: opens the saved-stream popup beneath the focused bar icon\.$/d; /^-- Stream PiP: prompts for an RTSP\/RTSPS URL and opens a pinned overlay\.$/d; /^o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "stream-pip")$/d; /^o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "omarchy-shell byronroark.streampip toggle")$/d' "$bindings_file"
@@ -30,12 +35,12 @@ o.bind("SUPER + SHIFT + ALT + L", "Stream PiP", "omarchy-shell shell toggle byro
 EOF
 fi
 
-sed -i '/^-- StreamPiP: arrange every active PiP to match the focused PiP\.$/d; /^o.bind("SUPER + SHIFT + ALT + T", "Arrange StreamPiP", "stream-pip-layout --arrange")$/d' "$bindings_file"
-if ! rg -Fq 'Arrange StreamPiP' "$bindings_file"; then
+sed -i '/^-- StreamPiP: snap all active PiPs into a thumbnail group\.$/d; /^o.bind("SUPER + SHIFT + ALT + T", "Snap StreamPiPs", "stream-pip-layout --snap-all")$/d; /^-- StreamPiP: arrange every active PiP to match the focused PiP\.$/d; /^o.bind("SUPER + SHIFT + ALT + T", "Arrange StreamPiP", "stream-pip-layout --arrange")$/d' "$bindings_file"
+if ! rg -Fq 'Snap StreamPiPs' "$bindings_file"; then
   cat >> "$bindings_file" <<'EOF'
 
--- StreamPiP: arrange every active PiP to match the focused PiP.
-o.bind("SUPER + SHIFT + ALT + T", "Arrange StreamPiP", "stream-pip-layout --arrange")
+-- StreamPiP: snap all active PiPs into a thumbnail group.
+o.bind("SUPER + SHIFT + ALT + T", "Snap StreamPiPs", "stream-pip-layout --snap-all")
 EOF
 fi
 

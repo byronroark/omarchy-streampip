@@ -5,13 +5,17 @@ picture-in-picture window.
 
 ## Screenshots
 
-Saved streams, with quick launch, mute, and removal controls:
+Choose and launch a saved stream from the compact popup:
 
 ![Saved StreamPiP streams](images/saved-streams.png)
 
 Add a named RTSP/RTSPS stream directly from the popup:
 
 ![Add a StreamPiP stream](images/add-stream.png)
+
+Select a stream to toggle its audio between **Mute** and **Audio**:
+
+![Toggle StreamPiP audio](images/audio-toggle.png)
 
 ## Controls
 
@@ -21,20 +25,25 @@ Add a named RTSP/RTSPS stream directly from the popup:
 - With a stream selected, **Mute** turns its audio off; **Audio** restores it.
   The setting is remembered per stream.
 - `SUPER + Right Mouse drag`: resize the stream window (native Omarchy behavior).
-- `SUPER + Left Mouse drag`: move the window.
 - `SUPER + W`: close the active Stream PiP window.
 - `SUPER + SHIFT + ALT + W`: close any StreamPiP window, including one that
   failed to receive keyboard focus.
-- `SUPER + T`: use Omarchy's normal floating/tiled toggle on the focused PiP.
-- `SUPER + SHIFT + ALT + T`: arrange every active StreamPiP to match the
-  focused PiP. Floating PiPs reflow into a 16:9 grid on that monitor; tiled
-  PiPs move into the persistent `special:streampip` Dwindle overlay.
+- `SUPER + SHIFT + ALT + T`: reset every active StreamPiP into a compact,
+  flush 320×180 thumbnail group on the focused monitor.
+- `SUPER + T`: re-snap StreamPiPs instead of tiling them. It keeps Omarchy's
+  normal floating/tiled toggle for every other app.
+- Left-drag any attached StreamPiP thumbnail to move its group. Shift-left-drag
+  peels one thumbnail away. Drag a peeled PiP near an edge to reattach it while
+  preserving each PiP's individual size.
+- Shift-right-drag a StreamPiP to resize only that PiP. Attached PiPs may keep
+  intentionally different sizes; use `SUPER + SHIFT + ALT + T` to reset the
+  whole cluster to compact defaults.
 
 The first PiP opens at 600×338 in the lower-right corner. Active floating PiPs
 automatically reflow after a stream opens or closes, preserve their aspect ratio,
-and stay pinned across workspaces. The tiled layout keeps all active streams in
-the StreamPiP special-workspace overlay while changing normal workspaces. Saved
-stream names and URLs are stored
+and stay pinned across workspaces. Detached streams keep their own position;
+attached streams reflow together whenever a stream opens or closes. Saved stream
+names and URLs are stored
 with owner-only permissions at `~/.config/omarchy/live-stream-pip/streams.tsv`.
 This is intentional so the hotkey can reuse streams, but URLs may contain RTSP
 credentials.

@@ -1,176 +1,203 @@
 #!/usr/bin/env bash
-# Arrange active StreamPiP windows without changing Omarchy's native SUPER + T.
+# Maintain StreamPiP's compact floating thumbnail group.
 set -euo pipefail
 
 state_dir="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/live-stream-pip"
-mode_file="$state_dir/layout-mode"
-workspace_file="$state_dir/floating-workspace"
-special_workspace="streampip"
-gap=16
+detached_file="$state_dir/detached-pips"
+gap=0
+max_pip_width=320
+max_pip_height=180
 
 mkdir -p "$state_dir"
 chmod 700 "$state_dir"
+touch "$detached_file"
+chmod 600 "$detached_file"
 
-mode() {
-  [[ -r "$mode_file" ]] && cat "$mode_file" || printf '%s\n' floating
+clients() { hyprctl clients -j | jq -c '[.[] | select(.class == "omarchy-stream-pip")]'; }
+
+clean_detached() {
+  local current temp
+  current=$(clients | jq -r '.[].address')
+  umask 077; temp=$(mktemp "$state_dir/detached-pips.XXXXXX")
+  while IFS= read -r address; do grep -Fxq "$address" <<<"$current" && printf '%s\n' "$address" >> "$temp"; done < "$detached_file"
+  mv "$temp" "$detached_file"
 }
 
-set_mode() {
-  umask 077
-  printf '%s\n' "$1" > "$mode_file"
-  chmod 600 "$mode_file"
+is_detached() { grep -Fxq "$1" "$detached_file"; }
+detach() { grep -Fxq "$1" "$detached_file" || printf '%s\n' "$1" >> "$detached_file"; }
+attach() { sed -i "\\|^$1$|d" "$detached_file"; }
+
+group_clients() {
+  clean_detached
+  local detached
+  detached=$(jq -Rsc 'split("\n") | map(select(length > 0))' "$detached_file")
+  clients | jq -c --argjson detached "$detached" '[.[] | .address as $address | select($detached | index($address) | not)]'
 }
 
-floating_workspace() {
-  [[ -r "$workspace_file" ]] && cat "$workspace_file"
-}
+toggle_float() { hyprctl -q eval "hl.dispatch(hl.dsp.window.float({ action = \"toggle\", window = \"address:$1\" }))"; }
+toggle_pin() { hyprctl -q eval "hl.dispatch(hl.dsp.window.pin({ action = \"toggle\", window = \"address:$1\" }))"; }
+ensure_floating() { [[ $(hyprctl clients -j | jq -r --arg address "$1" '.[] | select(.address == $address) | .floating') == true ]] || toggle_float "$1"; }
+ensure_pinned() { [[ $(hyprctl clients -j | jq -r --arg address "$1" '.[] | select(.address == $address) | .pinned') == true ]] || toggle_pin "$1"; }
+ensure_unpinned() { [[ $(hyprctl clients -j | jq -r --arg address "$1" '.[] | select(.address == $address) | .pinned') == false ]] || toggle_pin "$1"; }
+move_to_workspace() { hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ workspace = \"$2\", window = \"address:$1\" }))"; }
+move_to_monitor() { hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ monitor = \"$2\", window = \"address:$1\" }))"; }
+resize_window() { hyprctl -q eval "hl.dispatch(hl.dsp.window.resize({ x = $2, y = $3, window = \"address:$1\" }))"; }
+move_window() { hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ x = $2, y = $3, window = \"address:$1\" }))"; }
+move_relative() { hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ x = $2, y = $3, relative = true, window = \"address:$1\" }))"; }
 
-set_floating_workspace() {
-  umask 077
-  printf '%s\n' "$1" > "$workspace_file"
-  chmod 600 "$workspace_file"
-}
-
-clients() {
-  hyprctl clients -j | jq -c '[.[] | select(.class == "omarchy-stream-pip")]'
-}
-
-active_pip() {
-  hyprctl activewindow -j | jq -e 'select(.class == "omarchy-stream-pip")'
-}
-
-toggle_float() {
-  local address=$1
-  hyprctl -q eval "hl.dispatch(hl.dsp.window.float({ action = \"toggle\", window = \"address:$address\" }))"
-}
-
-toggle_pin() {
-  local address=$1
-  hyprctl -q eval "hl.dispatch(hl.dsp.window.pin({ action = \"toggle\", window = \"address:$address\" }))"
-}
-
-ensure_floating() {
-  local address=$1 desired=$2 current
-  current=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .floating')
-  [[ "$current" == "$desired" ]] || toggle_float "$address"
-}
-
-ensure_pinned() {
-  local address=$1 desired=$2 current
-  current=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .pinned')
-  [[ "$current" == "$desired" ]] || toggle_pin "$address"
-}
-
-move_to_workspace() {
-  local address=$1 workspace=$2
-  hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ workspace = \"$workspace\", window = \"address:$address\" }))"
-}
-
-move_to_monitor() {
-  local address=$1 monitor=$2
-  hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ monitor = \"$monitor\", window = \"address:$address\" }))"
-}
-
-resize_window() {
-  local address=$1 width=$2 height=$3
-  hyprctl -q eval "hl.dispatch(hl.dsp.window.resize({ x = $width, y = $height, window = \"address:$address\" }))"
-}
-
-move_window() {
-  local address=$1 x=$2 y=$3
-  hyprctl -q eval "hl.dispatch(hl.dsp.window.move({ x = $x, y = $y, window = \"address:$address\" }))"
-}
-
-special_is_visible() {
-  hyprctl monitors -j | jq -e --arg workspace "special:$special_workspace" \
-    '.[] | select(.specialWorkspace.name? == $workspace)' >/dev/null
-}
-
-show_special() {
-  special_is_visible || hyprctl -q eval "hl.dispatch(hl.dsp.workspace.toggle_special(\"$special_workspace\"))"
-}
-
-hide_special() {
-  special_is_visible && hyprctl -q eval "hl.dispatch(hl.dsp.workspace.toggle_special(\"$special_workspace\"))"
-}
-
-arrange_floating() {
-  local monitor=$1 windows count columns rows monitor_json mx my mw mh left top right bottom usable_x usable_y usable_w usable_h cell_w cell_h width height x y index address workspace
-  windows=$(clients)
-  count=$(jq 'length' <<<"$windows")
-  (( count > 0 )) || { hide_special; return 0; }
-  workspace=$(floating_workspace || true)
-  if [[ ! "$workspace" =~ ^[0-9]+$ ]]; then
-    workspace=$(hyprctl monitors -j | jq -r --argjson monitor "$monitor" '.[] | select(.id == $monitor) | .activeWorkspace.id')
-  fi
-
+arrange_group() {
+  local monitor=${1:-} anchor=${2:-} windows count columns rows monitor_json mx my mw mh left top right bottom usable_x usable_y usable_w usable_h cell_w cell_h width height grid_w grid_h x y index address workspace
+  [[ -n "$monitor" ]] || monitor=$(hyprctl activewindow -j | jq -r '.monitor // empty')
+  [[ -n "$monitor" ]] || monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .id' | head -n1)
+  windows=$(group_clients); count=$(jq 'length' <<<"$windows"); (( count > 0 )) || return 0
   monitor_json=$(hyprctl monitors -j | jq -ce --argjson monitor "$monitor" '.[] | select(.id == $monitor)')
-  mx=$(jq -r '.x' <<<"$monitor_json"); my=$(jq -r '.y' <<<"$monitor_json")
-  mw=$(jq -r '.width' <<<"$monitor_json"); mh=$(jq -r '.height' <<<"$monitor_json")
-  left=$(jq -r '.reserved[0] // 0' <<<"$monitor_json"); top=$(jq -r '.reserved[1] // 0' <<<"$monitor_json")
-  right=$(jq -r '.reserved[2] // 0' <<<"$monitor_json"); bottom=$(jq -r '.reserved[3] // 0' <<<"$monitor_json")
-  usable_x=$((mx + left + gap)); usable_y=$((my + top + gap))
-  usable_w=$((mw - left - right - 2 * gap)); usable_h=$((mh - top - bottom - 2 * gap))
-  columns=1
-  while (( columns * columns < count )); do columns=$((columns + 1)); done
-  rows=$(((count + columns - 1) / columns))
-  cell_w=$(((usable_w - gap * (columns - 1)) / columns))
-  cell_h=$(((usable_h - gap * (rows - 1)) / rows))
-  width=$cell_w; height=$((width * 9 / 16))
-  if (( height > cell_h )); then height=$cell_h; width=$((height * 16 / 9)); fi
-
+  workspace=$(jq -r '.activeWorkspace.id' <<<"$monitor_json")
+  mx=$(jq -r '.x' <<<"$monitor_json"); my=$(jq -r '.y' <<<"$monitor_json"); mw=$(jq -r '.width' <<<"$monitor_json"); mh=$(jq -r '.height' <<<"$monitor_json")
+  left=$(jq -r '.reserved[0] // 0' <<<"$monitor_json"); top=$(jq -r '.reserved[1] // 0' <<<"$monitor_json"); right=$(jq -r '.reserved[2] // 0' <<<"$monitor_json"); bottom=$(jq -r '.reserved[3] // 0' <<<"$monitor_json")
+  usable_x=$((mx + left + gap)); usable_y=$((my + top + gap)); usable_w=$((mw - left - right - 2 * gap)); usable_h=$((mh - top - bottom - 2 * gap))
+  columns=1; while (( columns * columns < count )); do columns=$((columns + 1)); done; rows=$(((count + columns - 1) / columns))
+  cell_w=$(((usable_w - gap * (columns - 1)) / columns)); cell_h=$(((usable_h - gap * (rows - 1)) / rows)); (( cell_w > max_pip_width )) && cell_w=$max_pip_width; (( cell_h > max_pip_height )) && cell_h=$max_pip_height
+  width=$cell_w; height=$((width * 9 / 16)); if (( height > cell_h )); then height=$cell_h; width=$((height * 16 / 9)); fi
+  grid_w=$((columns * width + (columns - 1) * gap)); grid_h=$((rows * height + (rows - 1) * gap))
+  if [[ -n "$anchor" ]]; then
+    usable_x=$(jq -r --arg address "$anchor" '.[] | select(.address == $address) | .at[0]' <<<"$windows")
+    usable_y=$(jq -r --arg address "$anchor" '.[] | select(.address == $address) | .at[1]' <<<"$windows")
+    (( usable_x < mx + left + gap )) && usable_x=$((mx + left + gap))
+    (( usable_y < my + top + gap )) && usable_y=$((my + top + gap))
+    (( usable_x + grid_w > mx + mw - right - gap )) && usable_x=$((mx + mw - right - gap - grid_w))
+    (( usable_y + grid_h > my + mh - bottom - gap )) && usable_y=$((my + mh - bottom - gap - grid_h))
+  else
+    usable_x=$((usable_x + (usable_w - grid_w) / 2)); usable_y=$((usable_y + (usable_h - grid_h) / 2))
+  fi
   index=0
   while IFS= read -r address; do
-    move_to_workspace "$address" "$workspace"
-    move_to_monitor "$address" "$monitor"
-    ensure_floating "$address" true
-    ensure_pinned "$address" true
-    x=$((usable_x + (index % columns) * (cell_w + gap) + (cell_w - width) / 2))
-    y=$((usable_y + (index / columns) * (cell_h + gap) + (cell_h - height) / 2))
-    resize_window "$address" "$width" "$height"
-    move_window "$address" "$x" "$y"
-    index=$((index + 1))
-  done < <(jq -r '.[].address' <<<"$windows")
-  hide_special
+    ensure_floating "$address"; ensure_unpinned "$address"; move_to_workspace "$address" "$workspace"; move_to_monitor "$address" "$monitor"; ensure_pinned "$address"
+    x=$((usable_x + (index % columns) * (width + gap))); y=$((usable_y + (index / columns) * (height + gap))); resize_window "$address" "$width" "$height"; move_window "$address" "$x" "$y"; index=$((index + 1))
+  done < <(jq -r --arg anchor "$anchor" 'sort_by([if .address == $anchor then 0 else 1 end, .at[1], .at[0]]) | .[].address' <<<"$windows")
 }
 
-arrange_tiled() {
-  local monitor=$1 address workspace
-  workspace=$(hyprctl monitors -j | jq -r --argjson monitor "$monitor" '.[] | select(.id == $monitor) | .activeWorkspace.id')
-  [[ "$workspace" =~ ^[0-9]+$ ]] && set_floating_workspace "$workspace"
-  while IFS= read -r address; do
-    ensure_pinned "$address" false
-    ensure_floating "$address" false
-    move_to_monitor "$address" "$monitor"
-    move_to_workspace "$address" "special:$special_workspace"
-  done < <(clients | jq -r '.[].address')
-  show_special
+group_drag() {
+  local address=$1 previous_x previous_y x y dx dy quiet=0 moved=0 peer
+  is_detached "$address" && return 0
+  previous_x=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .at[0]'); previous_y=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .at[1]')
+  for _ in {1..180}; do
+    sleep 0.016; x=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .at[0]'); y=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .at[1]'); dx=$((x - previous_x)); dy=$((y - previous_y))
+    if (( dx == 0 && dy == 0 )); then
+      quiet=$((quiet + 1)); (( moved && quiet > 30 )) && break; (( ! moved && quiet > 90 )) && break; continue
+    fi
+    moved=1; quiet=0; previous_x=$x; previous_y=$y
+    while IFS= read -r peer; do [[ "$peer" == "$address" ]] || move_relative "$peer" "$dx" "$dy"; done < <(group_clients | jq -r '.[].address')
+  done
 }
 
-reflow() {
-  local current=$1 target_monitor
-  target_monitor=$(hyprctl activewindow -j | jq -r '.monitor // empty')
-  [[ -n "$target_monitor" ]] || target_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .id' | head -n1)
-  [[ -n "$target_monitor" ]] || return 0
-  if [[ "$current" == tiled ]]; then arrange_tiled "$target_monitor"; else arrange_floating "$target_monitor"; fi
+snap_all() {
+  : > "$detached_file"
+  arrange_group
+}
+
+snap_if_near() {
+  local address=$1 window group x y width height threshold=48 peer peer_x peer_y peer_w peer_h candidate candidate_x candidate_y best_x= best_y= distance local_y_distance best_distance=
+  window=$(clients | jq -ce --arg address "$address" '.[] | select(.address == $address)') || return 0
+  group=$(group_clients)
+  [[ $(jq 'length' <<<"$group") -gt 0 ]] || { attach "$address"; arrange_group; return; }
+  x=$(jq '.at[0]' <<<"$window"); y=$(jq '.at[1]' <<<"$window"); width=$(jq '.size[0]' <<<"$window"); height=$(jq '.size[1]' <<<"$window")
+  # A broad bounding-box check makes a detached PiP feel magnetic anywhere
+  # inside the group. Only accept a deliberate edge-to-edge placement.
+  while IFS=$'\t' read -r peer peer_x peer_y peer_w peer_h; do
+    for candidate in \
+      "$((peer_x + peer_w)):$peer_y" \
+      "$((peer_x + peer_w)):$((peer_y + peer_h - height))" \
+      "$((peer_x - width)):$peer_y" \
+      "$((peer_x - width)):$((peer_y + peer_h - height))" \
+      "$peer_x:$((peer_y + peer_h))" \
+      "$((peer_x + peer_w - width)):$((peer_y + peer_h))" \
+      "$peer_x:$((peer_y - height))" \
+      "$((peer_x + peer_w - width)):$((peer_y - height))"; do
+      candidate_x=${candidate%%:*}; candidate_y=${candidate#*:}
+      distance=$(( candidate_x > x ? candidate_x - x : x - candidate_x ))
+      local_y_distance=$(( candidate_y > y ? candidate_y - y : y - candidate_y ))
+      (( local_y_distance > distance )) && distance=$local_y_distance
+      if (( distance <= threshold )) && { [[ -z "$best_distance" ]] || (( distance < best_distance )); }; then
+        best_x=$candidate_x; best_y=$candidate_y; best_distance=$distance
+      fi
+    done
+  done < <(jq -r '.[] | [.address, .at[0], .at[1], .size[0], .size[1]] | @tsv' <<<"$group")
+  [[ -n "$best_distance" ]] || return 0
+  move_window "$address" "$best_x" "$best_y"
+  # Reattaching preserves the deliberately chosen size of every PiP. The
+  # explicit --snap-all action is the only operation that resets the cluster
+  # to compact default thumbnails.
+  attach "$address"
+}
+
+watch_snap() {
+  local address=$1 previous_x previous_y x y quiet=0 moved=0
+  previous_x=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .at[0]')
+  previous_y=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .at[1]')
+  [[ -n "$previous_x" && "$previous_x" != null ]] || return 0
+  # Native window.drag consumes Lua's release callback. Watch only this peeled
+  # window outside the compositor, then evaluate one precise edge snap once it
+  # has stopped moving.
+  for _ in {1..300}; do
+    sleep 0.016
+    x=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .at[0]')
+    y=$(hyprctl clients -j | jq -r --arg address "$address" '.[] | select(.address == $address) | .at[1]')
+    [[ -n "$x" && "$x" != null ]] || return 0
+    if (( x == previous_x && y == previous_y )); then
+      quiet=$((quiet + 1))
+      if (( moved && quiet > 8 )); then snap_if_near "$address"; return 0; fi
+      (( ! moved && quiet > 600 )) && return 0
+      continue
+    fi
+    moved=1; quiet=0; previous_x=$x; previous_y=$y
+  done
+}
+
+detach_and_watch() {
+  detach "$1"
+  watch_snap "$1"
+}
+
+tighten_group() {
+  local address=$1 monitor windows monitor_json selected width height min_x min_y max_cell_x max_cell_y origin_x origin_y x y cell_x cell_y target_x target_y peer workspace mx my mw mh left top right bottom grid_w grid_h
+  is_detached "$address" && return 0
+  windows=$(group_clients)
+  selected=$(jq -ce --arg address "$address" '.[] | select(.address == $address)' <<<"$windows") || return 0
+  width=$(jq -r '.size[0]' <<<"$selected"); height=$(jq -r '.size[1]' <<<"$selected")
+  monitor=$(jq -r --arg address "$address" '.[] | select(.address == $address) | .monitor' <<<"$windows")
+  [[ -n "$monitor" && "$monitor" != null ]] || return 0
+  min_x=$(jq '[.[].at[0]] | min' <<<"$windows"); min_y=$(jq '[.[].at[1]] | min' <<<"$windows")
+  max_cell_x=$(jq --argjson min_x "$min_x" --argjson width "$width" '[.[] | ((.at[0] - $min_x + ($width / 2)) / $width | floor)] | max' <<<"$windows")
+  max_cell_y=$(jq --argjson min_y "$min_y" --argjson height "$height" '[.[] | ((.at[1] - $min_y + ($height / 2)) / $height | floor)] | max' <<<"$windows")
+  monitor_json=$(hyprctl monitors -j | jq -ce --argjson monitor "$monitor" '.[] | select(.id == $monitor)')
+  workspace=$(jq -r '.activeWorkspace.id' <<<"$monitor_json")
+  mx=$(jq -r '.x' <<<"$monitor_json"); my=$(jq -r '.y' <<<"$monitor_json"); mw=$(jq -r '.width' <<<"$monitor_json"); mh=$(jq -r '.height' <<<"$monitor_json")
+  left=$(jq -r '.reserved[0] // 0' <<<"$monitor_json"); top=$(jq -r '.reserved[1] // 0' <<<"$monitor_json"); right=$(jq -r '.reserved[2] // 0' <<<"$monitor_json"); bottom=$(jq -r '.reserved[3] // 0' <<<"$monitor_json")
+  grid_w=$(((max_cell_x + 1) * width)); grid_h=$(((max_cell_y + 1) * height))
+  origin_x=$min_x; origin_y=$min_y
+  (( origin_x < mx + left )) && origin_x=$((mx + left))
+  (( origin_y < my + top )) && origin_y=$((my + top))
+  (( origin_x + grid_w > mx + mw - right )) && origin_x=$((mx + mw - right - grid_w))
+  (( origin_y + grid_h > my + mh - bottom )) && origin_y=$((my + mh - bottom - grid_h))
+  while IFS=$'\t' read -r peer x y; do
+    cell_x=$(((x - min_x + width / 2) / width))
+    cell_y=$(((y - min_y + height / 2) / height))
+    target_x=$((origin_x + cell_x * width)); target_y=$((origin_y + cell_y * height))
+    ensure_floating "$peer"; ensure_unpinned "$peer"; move_to_workspace "$peer" "$workspace"; move_to_monitor "$peer" "$monitor"; ensure_pinned "$peer"
+    resize_window "$peer" "$width" "$height"; move_window "$peer" "$target_x" "$target_y"
+  done < <(jq -r '.[] | [.address, .at[0], .at[1]] | @tsv' <<<"$windows")
 }
 
 case ${1:---reflow} in
-  --arrange)
-    active=$(active_pip) || { printf '%s\n' 'Focus a StreamPiP window first.' >&2; exit 1; }
-    # A pinned PiP must be unpinned before Hyprland can tile it. Omarchy's
-    # native float toggle performs that first step, so an unpinned floating
-    # PiP on a normal workspace means "tile the set". A floating PiP already
-    # in our special workspace is the corresponding return-to-floating signal.
-    if [[ $(jq -r '.workspace.name' <<<"$active") == "special:$special_workspace" ]]; then
-      set_mode floating
-    elif [[ $(jq -r '.floating and .pinned' <<<"$active") == true ]]; then
-      set_mode floating
-    else
-      set_mode tiled
-    fi
-    reflow "$(mode)"
-    ;;
-  --reflow) reflow "$(mode)" ;;
-  *) printf '%s\n' 'Usage: stream-pip-layout [--arrange|--reflow]' >&2; exit 2 ;;
+  --reflow) arrange_group ;;
+  --arrange|--snap-all) snap_all ;;
+  # Peeling a thumbnail is deliberately non-layout-changing: the remaining
+  # group must stay exactly where the user put it.
+  --detach) detach "${2:?PiP address required}" ;;
+  --detach-and-watch) detach_and_watch "${2:?PiP address required}" ;;
+  --watch-snap) watch_snap "${2:?PiP address required}" ;;
+  --snap) snap_if_near "${2:?PiP address required}" ;;
+  --group-drag) group_drag "${2:?PiP address required}" ;;
+  --tighten) tighten_group "${2:?PiP address required}" ;;
+  *) printf '%s\n' 'Usage: stream-pip-layout [--reflow|--snap-all|--detach ADDRESS|--detach-and-watch ADDRESS|--watch-snap ADDRESS|--snap ADDRESS|--group-drag ADDRESS]' >&2; exit 2 ;;
 esac

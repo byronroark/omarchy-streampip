@@ -54,7 +54,7 @@ PopupCard {
       width: parent.width - 28
       anchors.centerIn: parent
       spacing: 9
-      Text { text: "▣  Stream PiP"; color: root.fg; font.family: root.fontFamily; font.bold: true; font.pixelSize: 14 }
+      Text { text: "󰞮  Stream PiP"; color: root.fg; font.family: root.fontFamily; font.bold: true; font.pixelSize: 14 }
       Text { text: "Choose a saved live stream"; color: root.muted; font.family: root.fontFamily; font.pixelSize: 11 }
       Rectangle { width: parent.width; height: 1; color: root.border }
       Repeater {
