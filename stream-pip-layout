@@ -98,8 +98,9 @@ snap_all() {
 snap_if_near() {
   local address=$1 window group x y width height threshold=48 peer peer_x peer_y peer_w peer_h candidate candidate_x candidate_y best_x= best_y= distance local_y_distance best_distance=
   window=$(clients | jq -ce --arg address "$address" '.[] | select(.address == $address)') || return 0
-  group=$(group_clients)
-  [[ $(jq 'length' <<<"$group") -gt 0 ]] || { attach "$address"; arrange_group; return; }
+  group=$(group_clients | jq -c --arg address "$address" '[.[] | select(.address != $address)]')
+  # With no attached neighbor, leave this PiP where the user dropped it.
+  [[ $(jq 'length' <<<"$group") -gt 0 ]] || return 0
   x=$(jq '.at[0]' <<<"$window"); y=$(jq '.at[1]' <<<"$window"); width=$(jq '.size[0]' <<<"$window"); height=$(jq '.size[1]' <<<"$window")
   # A broad bounding-box check makes a detached PiP feel magnetic anywhere
   # inside the group. Only accept a deliberate edge-to-edge placement.

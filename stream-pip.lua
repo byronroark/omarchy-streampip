@@ -6,6 +6,8 @@ o.window({ class = "^omarchy-stream-pip$", title = "^Stream PiP$" }, {
   float = true,
   pin = true,
   no_dim = true,
+  -- Pointer-driven geometry must not chase animated intermediate positions.
+  no_anim = true,
   keep_aspect_ratio = true,
   size = { 600, 338 },
   move = { "(monitor_w-window_w-40)", "(monitor_h-window_h-40)" },
@@ -30,6 +32,8 @@ local group_resize_timer = nil
 local group_resize_address = nil
 local group_settle_timer = nil
 local shift_drag_active = false
+local drag_update = nil
+local resize_update = nil
 
 -- Mouse binds without modifiers may also be considered while Shift is held.
 -- Use the real XKB keysyms (not the invalid generic "SHIFT" keysym) so the
@@ -38,14 +42,15 @@ local function shift_is_down()
   return hl.is_key_down("Shift_L") or hl.is_key_down("Shift_R")
 end
 
--- The final pointer update is applied asynchronously by Hyprland. Wait one
--- frame before tightening, otherwise a late update can reintroduce a gap.
-local function settle_stream_pip_group(address)
-  if group_settle_timer then group_settle_timer:set_enabled(false) end
-  group_settle_timer = hl.timer(function()
-    hl.exec_cmd("stream-pip-layout --tighten " .. o.shell_quote(address))
-    group_settle_timer = nil
-  end, { timeout = 80, type = "oneshot" })
+-- A new gesture owns all geometry updates and cancels pending snap timers.
+local function cancel_gesture()
+  if group_settle_timer then group_settle_timer:set_enabled(false); group_settle_timer = nil end
+  if group_drag_timer then group_drag_timer:set_enabled(false); group_drag_timer = nil end
+  if group_resize_timer then group_resize_timer:set_enabled(false); group_resize_timer = nil end
+  drag_update, resize_update = nil, nil
+  group_drag_address, group_resize_address = nil, nil
+  group_drag_snap_on_release = false
+  shift_drag_active = false
 end
 
 local function detached_addresses()
@@ -58,25 +63,28 @@ local function detached_addresses()
 end
 
 local function start_individual_stream_pip_drag(selected, snap_on_release)
+  cancel_gesture()
   local start = hl.get_cursor_pos()
   local origin_x, origin_y = selected.at.x, selected.at.y
   if group_drag_timer then group_drag_timer:set_enabled(false) end
   group_drag_address = selected.address
   group_drag_snap_on_release = snap_on_release
-  group_drag_timer = hl.timer(function()
+  drag_update = function()
     local cursor = hl.get_cursor_pos()
     hl.dispatch(hl.dsp.window.move({
       x = origin_x + cursor.x - start.x,
       y = origin_y + cursor.y - start.y,
       window = selected,
     }))
-  end, { timeout = 16, type = "repeat" })
+  end
+  group_drag_timer = hl.timer(drag_update, { timeout = 16, type = "repeat" })
 end
 
 local function start_stream_pip_group_drag()
   if shift_drag_active or shift_is_down() then return end
   local selected = pip_at_cursor()
   if not selected then return end
+  cancel_gesture()
   local start = hl.get_cursor_pos()
   local detached = detached_addresses()
   -- A peeled PiP is independent. Its ordinary drag must move itself, rather
@@ -93,16 +101,18 @@ local function start_stream_pip_group_drag()
   end
   if group_drag_timer then group_drag_timer:set_enabled(false) end
   group_drag_address = selected.address
-  group_drag_timer = hl.timer(function()
+  drag_update = function()
     local cursor = hl.get_cursor_pos()
     local dx, dy = cursor.x - start.x, cursor.y - start.y
     for _, position in ipairs(positions) do
       hl.dispatch(hl.dsp.window.move({ x = position.x + dx, y = position.y + dy, window = position.window }))
     end
-  end, { timeout = 16, type = "repeat" })
+  end
+  group_drag_timer = hl.timer(drag_update, { timeout = 16, type = "repeat" })
 end
 
 local function stop_stream_pip_group_drag()
+  if drag_update then drag_update(); drag_update = nil end
   if group_drag_timer then group_drag_timer:set_enabled(false); group_drag_timer = nil end
   -- Every attached member receives the same delta, so group geometry remains
   -- intact without a post-drag layout pass that could move it unexpectedly.
@@ -122,6 +132,7 @@ local function start_stream_pip_group_resize()
   if not shift_is_down() then return end
   local selected = pip_at_cursor()
   if not selected then return end
+  cancel_gesture()
 
   local start = hl.get_cursor_pos()
   local base_width = selected.size.x
@@ -134,11 +145,13 @@ local function start_stream_pip_group_resize()
 
   if group_resize_timer then group_resize_timer:set_enabled(false) end
   group_resize_address = selected.address
-  group_resize_timer = hl.timer(function()
+  resize_update = function()
     local cursor = hl.get_cursor_pos()
     local horizontal_delta = (anchor_left and start.x - cursor.x or cursor.x - start.x) * resize_sensitivity
     local vertical_delta = (anchor_top and start.y - cursor.y or cursor.y - start.y) * 16 / 9 * resize_sensitivity
-    local raw_delta = math.abs(vertical_delta) > math.abs(horizontal_delta) and vertical_delta or horizontal_delta
+    -- Project onto the aspect-ratio diagonal continuously. Choosing the
+    -- dominant axis each frame jumps when the pointer crosses that boundary.
+    local raw_delta = (horizontal_delta + vertical_delta * (9 / 16)^2) / (1 + (9 / 16)^2)
     local delta = raw_delta >= 0 and math.floor(raw_delta) or math.ceil(raw_delta)
     -- Permit large inspection views while retaining a sane lower bound.
     local width = math.max(160, math.min(1600, base_width + delta))
@@ -147,10 +160,12 @@ local function start_stream_pip_group_resize()
     local y = anchor_top and base_y + base_height - height or base_y
     hl.dispatch(hl.dsp.window.resize({ x = width, y = height, window = selected }))
     hl.dispatch(hl.dsp.window.move({ x = x, y = y, window = selected }))
-  end, { timeout = 16, type = "repeat" })
+  end
+  group_resize_timer = hl.timer(resize_update, { timeout = 16, type = "repeat" })
 end
 
 local function stop_stream_pip_group_resize()
+  if resize_update then resize_update(); resize_update = nil end
   if group_resize_timer then group_resize_timer:set_enabled(false); group_resize_timer = nil end
   group_resize_address = nil
 end
