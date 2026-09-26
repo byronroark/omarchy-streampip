@@ -29,7 +29,8 @@ Select a stream to toggle its audio between **Mute** and **Audio**:
 - `SUPER + SHIFT + ALT + W`: close any StreamPiP window, including one that
   failed to receive keyboard focus.
 - `SUPER + SHIFT + ALT + T`: reset every active StreamPiP into a compact,
-  flush 320×180 thumbnail group on the focused monitor.
+  flush vertical thumbnail stack at the focused monitor's top-right, below the bar.
+  PiPs default to 320×180 and shrink if needed to fit the full stack on-screen.
 - `SUPER + T`: re-snap StreamPiPs instead of tiling them. It keeps Omarchy's
   normal floating/tiled toggle for every other app.
 - Left-drag any attached StreamPiP thumbnail to move its group. Shift-left-drag
@@ -52,7 +53,7 @@ Select a stream to toggle its audio between **Mute** and **Audio**:
    The opposite corner stays fixed, the 16:9 aspect ratio is preserved, and
    neighboring PiPs are not resized.
 5. **Start over:** press `SUPER + SHIFT + ALT + T` to attach every active PiP
-   and restore the compact 320×180 thumbnail grid.
+   and restore the compact vertical stack at the monitor's top-right.
 
 The first PiP opens at 600×338 in the lower-right corner. Active floating PiPs
 automatically reflow after a stream opens or closes, preserve their aspect ratio,

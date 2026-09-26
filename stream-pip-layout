@@ -52,10 +52,14 @@ arrange_group() {
   windows=$(group_clients); count=$(jq 'length' <<<"$windows"); (( count > 0 )) || return 0
   monitor_json=$(hyprctl monitors -j | jq -ce --argjson monitor "$monitor" '.[] | select(.id == $monitor)')
   workspace=$(jq -r '.activeWorkspace.id' <<<"$monitor_json")
-  mx=$(jq -r '.x' <<<"$monitor_json"); my=$(jq -r '.y' <<<"$monitor_json"); mw=$(jq -r '.width' <<<"$monitor_json"); mh=$(jq -r '.height' <<<"$monitor_json")
+  mx=$(jq -r '.x' <<<"$monitor_json"); my=$(jq -r '.y' <<<"$monitor_json")
+  # Window positions use logical pixels; rotated outputs swap physical axes.
+  mw=$(jq -r '((if (.transform % 2) == 1 then .height else .width end) / .scale) | floor' <<<"$monitor_json")
+  mh=$(jq -r '((if (.transform % 2) == 1 then .width else .height end) / .scale) | floor' <<<"$monitor_json")
   left=$(jq -r '.reserved[0] // 0' <<<"$monitor_json"); top=$(jq -r '.reserved[1] // 0' <<<"$monitor_json"); right=$(jq -r '.reserved[2] // 0' <<<"$monitor_json"); bottom=$(jq -r '.reserved[3] // 0' <<<"$monitor_json")
-  usable_x=$((mx + left + gap)); usable_y=$((my + top + gap)); usable_w=$((mw - left - right - 2 * gap)); usable_h=$((mh - top - bottom - 2 * gap))
-  columns=1; while (( columns * columns < count )); do columns=$((columns + 1)); done; rows=$(((count + columns - 1) / columns))
+  local margin=12
+  usable_x=$((mx + left + margin)); usable_y=$((my + top + margin)); usable_w=$((mw - left - right - 2 * margin)); usable_h=$((mh - top - bottom - 2 * margin))
+  columns=1; rows=$count
   cell_w=$(((usable_w - gap * (columns - 1)) / columns)); cell_h=$(((usable_h - gap * (rows - 1)) / rows)); (( cell_w > max_pip_width )) && cell_w=$max_pip_width; (( cell_h > max_pip_height )) && cell_h=$max_pip_height
   width=$cell_w; height=$((width * 9 / 16)); if (( height > cell_h )); then height=$cell_h; width=$((height * 16 / 9)); fi
   grid_w=$((columns * width + (columns - 1) * gap)); grid_h=$((rows * height + (rows - 1) * gap))
@@ -67,7 +71,7 @@ arrange_group() {
     (( usable_x + grid_w > mx + mw - right - gap )) && usable_x=$((mx + mw - right - gap - grid_w))
     (( usable_y + grid_h > my + mh - bottom - gap )) && usable_y=$((my + mh - bottom - gap - grid_h))
   else
-    usable_x=$((usable_x + (usable_w - grid_w) / 2)); usable_y=$((usable_y + (usable_h - grid_h) / 2))
+    usable_x=$((usable_x + usable_w - grid_w))
   fi
   index=0
   while IFS= read -r address; do
@@ -91,8 +95,11 @@ group_drag() {
 }
 
 snap_all() {
+  local monitor
+  monitor=$(hyprctl monitors -j | jq -r '[.[] | select(.focused) | .id][0] // empty')
+  [[ -n "$monitor" ]] || return 0
   : > "$detached_file"
-  arrange_group
+  arrange_group "$monitor"
 }
 
 snap_if_near() {
