@@ -64,6 +64,9 @@ with owner-only permissions at `~/.config/omarchy/live-stream-pip/streams.tsv`.
 This is intentional so the hotkey can reuse streams, but URLs may contain RTSP
 credentials.
 
+The popup sends a new URL to `stream-pip --add` over stdin, so camera
+credentials do not appear in the add process's command line.
+
 When a stream launches, its URL is provided to mpv through a temporary
 owner-only playlist file, not the process command line.
 

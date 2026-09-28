@@ -103,10 +103,11 @@ snap_all() {
 }
 
 snap_if_near() {
-  local address=$1 window group x y width height threshold=48 peer peer_x peer_y peer_w peer_h candidate candidate_x candidate_y best_x= best_y= distance local_y_distance best_distance=
+  local address=$1 window group x y width height threshold=48 peer peer_x peer_y peer_w peer_h candidate candidate_x candidate_y best_x= best_y= best_peer= distance local_y_distance best_distance=
   window=$(clients | jq -ce --arg address "$address" '.[] | select(.address == $address)') || return 0
-  group=$(group_clients | jq -c --arg address "$address" '[.[] | select(.address != $address)]')
-  # With no attached neighbor, leave this PiP where the user dropped it.
+  # A group can have no attached members after moving PiPs between monitors.
+  # Allow a peeled PiP to rejoin any nearby PiP, including another peeled one.
+  group=$(clients | jq -c --arg address "$address" '[.[] | select(.address != $address)]')
   [[ $(jq 'length' <<<"$group") -gt 0 ]] || return 0
   x=$(jq '.at[0]' <<<"$window"); y=$(jq '.at[1]' <<<"$window"); width=$(jq '.size[0]' <<<"$window"); height=$(jq '.size[1]' <<<"$window")
   # A broad bounding-box check makes a detached PiP feel magnetic anywhere
@@ -126,7 +127,7 @@ snap_if_near() {
       local_y_distance=$(( candidate_y > y ? candidate_y - y : y - candidate_y ))
       (( local_y_distance > distance )) && distance=$local_y_distance
       if (( distance <= threshold )) && { [[ -z "$best_distance" ]] || (( distance < best_distance )); }; then
-        best_x=$candidate_x; best_y=$candidate_y; best_distance=$distance
+        best_x=$candidate_x; best_y=$candidate_y; best_peer=$peer; best_distance=$distance
       fi
     done
   done < <(jq -r '.[] | [.address, .at[0], .at[1], .size[0], .size[1]] | @tsv' <<<"$group")
@@ -135,6 +136,7 @@ snap_if_near() {
   # Reattaching preserves the deliberately chosen size of every PiP. The
   # explicit --snap-all action is the only operation that resets the cluster
   # to compact default thumbnails.
+  attach "$best_peer"
   attach "$address"
 }
 

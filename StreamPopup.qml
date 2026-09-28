@@ -26,6 +26,16 @@ PopupCard {
   function close() { open = false }
   function refresh() { streams.clear(); selectedRow = -1; listProcess.running = true }
   function run(args) { actionProcess.command = ["/usr/bin/env", "bash", launcherPath].concat(args); actionProcess.running = true }
+  function addStream(name, url, audio) {
+    if (addProcess.running) return false
+    if (!name || /[\t\n]/.test(name)) { errorText = "Enter a stream name without tabs or line breaks."; return false }
+    if (!/^rtsps?:\/\//.test(url) || /[\t\n]/.test(url)) { errorText = "Enter an RTSP/RTSPS URL without tabs or line breaks."; return false }
+    errorText = ""
+    addProcess.pendingUrl = url
+    addProcess.command = ["/usr/bin/env", "bash", launcherPath, "--add", name, audio]
+    addProcess.running = true
+    return true
+  }
   function parseStream(line) {
     var fields = line.split("\t")
     if (fields.length >= 3) streams.append({ row: Number(fields[0]), name: fields[1], audio: fields[2] })
@@ -49,6 +59,16 @@ PopupCard {
       stdout: SplitParser { onRead: line => root.parseStream(line) }
     }
     Process { id: actionProcess; onExited: root.refresh() }
+    Process {
+      id: addProcess
+      property string pendingUrl: ""
+      stdinEnabled: true
+      onStarted: {
+        write(pendingUrl + "\n")
+        pendingUrl = ""
+      }
+      onExited: root.refresh()
+    }
     Column {
       id: content
       width: parent.width - 28
@@ -90,7 +110,7 @@ PopupCard {
         PopupInput { id: nameInput; placeholder: "Name (e.g. Front door)" }
         PopupInput { id: urlInput; placeholder: "rtsp://camera.example/live" }
         Row { spacing: 8
-          PopupButton { label: "Save"; width: 110; onClicked: { root.run(["--add", nameInput.text, urlInput.text, mutedToggle.on ? "muted" : "audible"]); nameInput.text = ""; urlInput.text = ""; addForm.visible = false } }
+          PopupButton { label: "Save"; width: 110; onClicked: { if (root.addStream(nameInput.text, urlInput.text, mutedToggle.on ? "muted" : "audible")) { nameInput.text = ""; urlInput.text = ""; addForm.visible = false } } }
           PopupButton { id: mutedToggle; property bool on: false; label: on ? "Muted" : "Audio on"; width: 110; onClicked: on = !on }
         }
       }

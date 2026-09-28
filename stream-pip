@@ -26,8 +26,9 @@ list_streams() {
 }
 
 add_stream() {
-  local name=${1:-} url=${2:-} audio=${3:-audible}
+  local name=${1:-} audio=${2:-audible} url
   [[ -n "$name" && "$name" != *$'\t'* && "$name" != *$'\n'* ]] || { echo 'Stream name is required.' >&2; return 2; }
+  IFS= read -r url || { echo 'Stream URL is required on stdin.' >&2; return 2; }
   [[ "$url" =~ ^rtsps?:// && "$url" != *$'\t'* && "$url" != *$'\n'* ]] || { echo 'Use an rtsp:// or rtsps:// URL.' >&2; return 2; }
   [[ "$audio" == muted ]] || audio=audible
   umask 077
@@ -70,7 +71,9 @@ launch_stream() {
   # after that stream exits.
   (
     trap 'rm -f "$playlist_file"' EXIT
-    mpv --force-window=immediate --title="Stream PiP" --wayland-app-id="omarchy-stream-pip" \
+    # StreamPiP's Hyprland mouse handler owns dragging; mpv's default
+    # window drag would fight it and make the PiP jitter under the pointer.
+    mpv --force-window=immediate --no-window-dragging --title="Stream PiP" --wayland-app-id="omarchy-stream-pip" \
       --profile=low-latency --cache=yes --demuxer-max-bytes=8MiB --demuxer-max-back-bytes=2MiB \
       "${mpv_audio_args[@]}" --playlist="$playlist_file"
     "$layout_command" --reflow >/dev/null 2>&1 || true
@@ -85,9 +88,9 @@ launch_stream() {
 
 case ${1:-list} in
   --list|list) list_streams ;;
-  --add) add_stream "${2:-}" "${3:-}" "${4:-audible}" ;;
+  --add) [[ $# -eq 3 ]] || { echo 'Usage: stream-pip --add NAME [muted|audible] < URL' >&2; exit 2; }; add_stream "$2" "$3" ;;
   --toggle) valid_row "${2:-}" && rewrite_streams "$2" toggle ;;
   --delete) valid_row "${2:-}" && rewrite_streams "$2" delete ;;
   --launch) launch_stream "${2:-}" ;;
-  *) echo "Usage: stream-pip [--list|--add NAME URL [muted]|--toggle ROW|--delete ROW|--launch ROW]" >&2; exit 2 ;;
+  *) echo "Usage: stream-pip [--list|--add NAME [muted|audible] < URL|--toggle ROW|--delete ROW|--launch ROW]" >&2; exit 2 ;;
 esac

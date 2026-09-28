@@ -28,6 +28,7 @@ end
 local group_drag_timer = nil
 local group_drag_address = nil
 local group_drag_snap_on_release = false
+local group_drag_offsets = nil
 local group_resize_timer = nil
 local group_resize_address = nil
 local group_settle_timer = nil
@@ -50,6 +51,7 @@ local function cancel_gesture()
   drag_update, resize_update = nil, nil
   group_drag_address, group_resize_address = nil, nil
   group_drag_snap_on_release = false
+  group_drag_offsets = nil
   shift_drag_active = false
 end
 
@@ -65,15 +67,19 @@ end
 local function start_individual_stream_pip_drag(selected, snap_on_release)
   cancel_gesture()
   local start = hl.get_cursor_pos()
-  local origin_x, origin_y = selected.at.x, selected.at.y
+  local previous_x, previous_y = start.x, start.y
   if group_drag_timer then group_drag_timer:set_enabled(false) end
   group_drag_address = selected.address
   group_drag_snap_on_release = snap_on_release
   drag_update = function()
     local cursor = hl.get_cursor_pos()
+    local dx, dy = cursor.x - previous_x, cursor.y - previous_y
+    previous_x, previous_y = cursor.x, cursor.y
+    if dx == 0 and dy == 0 then return end
     hl.dispatch(hl.dsp.window.move({
-      x = origin_x + cursor.x - start.x,
-      y = origin_y + cursor.y - start.y,
+      x = dx,
+      y = dy,
+      relative = true,
       window = selected,
     }))
   end
@@ -86,6 +92,7 @@ local function start_stream_pip_group_drag()
   if not selected then return end
   cancel_gesture()
   local start = hl.get_cursor_pos()
+  local previous_x, previous_y = start.x, start.y
   local detached = detached_addresses()
   -- A peeled PiP is independent. Its ordinary drag must move itself, rather
   -- than moving whichever attached PiPs happen to remain in a group.
@@ -93,19 +100,29 @@ local function start_stream_pip_group_drag()
     start_individual_stream_pip_drag(selected, true)
     return
   end
-  local positions = {}
+  local windows = {}
+  group_drag_offsets = {}
   for _, window in pairs(hl.get_windows()) do
     if window.class == "omarchy-stream-pip" and not detached[window.address] then
-      positions[#positions + 1] = { window = window, x = window.at.x, y = window.at.y }
+      windows[#windows + 1] = window
+      if window.address ~= selected.address then
+        group_drag_offsets[#group_drag_offsets + 1] = {
+          address = window.address,
+          x = window.at.x - selected.at.x,
+          y = window.at.y - selected.at.y,
+        }
+      end
     end
   end
   if group_drag_timer then group_drag_timer:set_enabled(false) end
   group_drag_address = selected.address
   drag_update = function()
     local cursor = hl.get_cursor_pos()
-    local dx, dy = cursor.x - start.x, cursor.y - start.y
-    for _, position in ipairs(positions) do
-      hl.dispatch(hl.dsp.window.move({ x = position.x + dx, y = position.y + dy, window = position.window }))
+    local dx, dy = cursor.x - previous_x, cursor.y - previous_y
+    previous_x, previous_y = cursor.x, cursor.y
+    if dx == 0 and dy == 0 then return end
+    for _, window in ipairs(windows) do
+      hl.dispatch(hl.dsp.window.move({ x = dx, y = dy, relative = true, window = window }))
     end
   end
   group_drag_timer = hl.timer(drag_update, { timeout = 16, type = "repeat" })
@@ -114,17 +131,40 @@ end
 local function stop_stream_pip_group_drag()
   if drag_update then drag_update(); drag_update = nil end
   if group_drag_timer then group_drag_timer:set_enabled(false); group_drag_timer = nil end
-  -- Every attached member receives the same delta, so group geometry remains
-  -- intact without a post-drag layout pass that could move it unexpectedly.
-  local address, should_snap = group_drag_address, group_drag_snap_on_release
+  -- Every attached member receives the same cursor delta. Reconcile small
+  -- rounding differences after the drag when monitor scales differ.
+  local address, should_snap, offsets = group_drag_address, group_drag_snap_on_release, group_drag_offsets
   group_drag_address = nil
   group_drag_snap_on_release = false
+  group_drag_offsets = nil
   if address and should_snap then
     if group_settle_timer then group_settle_timer:set_enabled(false) end
     group_settle_timer = hl.timer(function()
       hl.exec_cmd("stream-pip-layout --snap " .. o.shell_quote(address))
       group_settle_timer = nil
     end, { timeout = 100, type = "oneshot" })
+  elseif address and offsets and #offsets > 0 then
+    -- Crossing monitors with different scales can round each relative move
+    -- differently. Restore the group's original edge offsets after release.
+    if group_settle_timer then group_settle_timer:set_enabled(false) end
+    group_settle_timer = hl.timer(function()
+      local by_address = {}
+      for _, window in pairs(hl.get_windows()) do by_address[window.address] = window end
+      local selected = by_address[address]
+      if selected then
+        for _, offset in ipairs(offsets) do
+          local peer = by_address[offset.address]
+          if peer then
+            local dx = selected.at.x + offset.x - peer.at.x
+            local dy = selected.at.y + offset.y - peer.at.y
+            if dx ~= 0 or dy ~= 0 then
+              hl.dispatch(hl.dsp.window.move({ x = dx, y = dy, relative = true, window = peer }))
+            end
+          end
+        end
+      end
+      group_settle_timer = nil
+    end, { timeout = 60, type = "oneshot" })
   end
 end
 
